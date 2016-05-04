@@ -1,0 +1,83 @@
+
+class Multipart {
+ ID uint16
+ GroupID uint32
+ NumParts uint16
+ Content []byte
+}
+
+class Heartbeat {
+ Time int64
+ Latency int64
+}
+
+class Connected {
+}
+
+class Disconnected {
+}
+
+class CreateAcct {
+ Name string
+ Password string
+}
+
+class CreateAcctResp {
+ AccountID uint32
+ Name string
+}
+
+class Login {
+ Name string
+ Password string
+}
+
+class LoginResp {
+ Success byte
+ Name string
+ AccountID uint32
+}
+
+class JoinGame {
+}
+
+class GameConnected {
+ ID uint32
+ TickID uint32
+ Entities []*Entity
+ Snakes []*Snake
+}
+
+class GameMasterFrame {
+ ID uint32
+ Entities []*Entity
+ Snakes []*Snake
+ Tick uint32
+}
+
+class Entity {
+ ID uint32
+ EType uint16
+ ContainerID uint32
+ X int32
+ Y int32
+ Size int32
+ Facing *Vect2
+}
+
+class Snake {
+ ID uint32
+ Segments []uint32
+ Speed int32
+}
+
+class SetDirection {
+ ID uint32
+ Facing *Vect2
+ TickID uint32
+}
+
+class Vect2 {
+ X int32
+ Y int32
+}

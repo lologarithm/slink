@@ -1,0 +1,8 @@
+slink
+netgenerator/netgenerator
+slinkclient/Temp
+slinkclient/obj
+slinkclient/Library
+.vscode
+*.sln
+*.csproj
