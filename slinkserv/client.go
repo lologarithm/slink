@@ -68,7 +68,7 @@ func (client *Client) ProcessBytes(disconClient chan Client) {
 						id:     tmsg.ID,
 					}
 					atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&client.activeGame)), unsafe.Pointer(activeGame))
-					log.Printf("Got connected, hooked up toGame channel!")
+					log.Printf("Client %d connected to game: %d", client.ID, tmsg.ID)
 				}
 			case <-time.After(time.Second * 2):
 				if !client.Alive {
@@ -79,13 +79,13 @@ func (client *Client) ProcessBytes(disconClient chan Client) {
 					Time:    time.Now().UTC().UnixNano(),
 					Latency: atomic.LoadInt64(&client.latency),
 				})
+
 				// If after 5 seconds we haven't gotten any messages, shut er down!
 				lastMsg := time.Unix(atomic.LoadInt64(&client.lastMsg), 0)
-				if time.Now().UTC().Sub(lastMsg).Seconds() >= 5 {
+				if time.Now().UTC().Sub(lastMsg).Seconds() > 4 {
 					client.FromNetwork.Close()
+					return
 				}
-
-				return
 			}
 		}
 
@@ -130,7 +130,7 @@ func (client *Client) ProcessBytes(disconClient chan Client) {
 			// This means we need more data still.
 			n := client.FromNetwork.Read(client.buffer[client.wIdx:])
 			if n == 0 {
-				log.Printf("got 0 byte message from client, shutten er down!")
+				log.Printf("Client %d network buffer closed, shutting down client.", client.ID)
 				client.Alive = false
 				break // Break out of alive!
 			}
@@ -183,7 +183,6 @@ func (client *Client) ProcessBytes(disconClient chan Client) {
 			client.wIdx -= packet.Len()
 		}
 	}
-	log.Printf("  shutdown client msg parser: %d\n", client.ID)
 	client.toGameManager <- GameMessage{
 		client: client,
 		net:    &messages.Disconnected{},
@@ -191,4 +190,5 @@ func (client *Client) ProcessBytes(disconClient chan Client) {
 	}
 	disconClient <- *client
 	close(client.FromGameManager)
+	log.Printf("  Client %d shutdown complete", client.ID)
 }

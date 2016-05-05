@@ -11,31 +11,38 @@ public class ClientState : MonoBehaviour
 	public string serverAddress;
 	public int serverPort;
 	public GameObject latencyTextContainer;
+    public Camera mainCam;
 
 	private NetworkMessenger net;
-	private uint account;
+	private uint mySnake;
 
 	private Queue<NetPacket> message_queue = new Queue<NetPacket>();
 	private Dictionary<uint, Multipart[]> multipart_cache = new Dictionary<uint, Multipart[]>();
+
+    // Account
+    private uint accountID;
 
 	// Game state
 	private GameInstance game;
 	private long latencyms;
 
 	// Unity objects state
-	private DateTime lastUpdate;
 	private Dictionary<uint, GameObject> segments = new Dictionary<uint, GameObject> ();
 	private Text latencyText;
 
+    // Unity lifecycle methods
 	void Start()
 	{
+        // Setup component and connect to network, send create/join messages!
 		this.latencyText = latencyTextContainer.GetComponent<Text>();
+
+        // TODO: allow handoff of network messenger from another scene?
+        // Or do we pass the entire client state manager from scene to scene?
 		net = new NetworkMessenger(this.message_queue, serverAddress, serverPort);
 		this.CreateAccount("asdf", "asdf");
 		this.JoinGame();
 	}
-
-
+        
 	// Update is called once per frame?
 	void Update()
 	{
@@ -50,61 +57,22 @@ public class ClientState : MonoBehaviour
 		{
 			return;
 		}
+        if (this.updateGame()) // Only allow dir changes on ticks.
+        {
+            int centerX = Screen.width / 2;
+            int centerY = Screen.height / 2;
+            Vector2 move = new Vector2(Input.mousePosition.x - centerX, Input.mousePosition.y - centerY);
+            move.Normalize();
+            move.Scale(new Vector2(100,100));
 
-		this.updateGame();
-	}
+            Vect2 myfacing = this.game.entities[this.mySnake].Facing;
 
-	private void updateGame() {
-		this.game.UpdateTick();
-
-		if (this.game.LastTickUpdated == this.game.Tick) {
-			return;
-		}
-
-		for (int i = 0; i < this.game.entities.Length; i++) {
-			Entity e = this.game.entities[i];
-
-			if (this.segments.ContainsKey(e.ID)) 
-			{
-				if (e.EType == 1) {
-					double nticks = this.game.Tick - this.game.LastTickUpdated;
-					// TODO: add speed into this (right now speed is hardcoded to 100 units over 50 updates/sec)
-					double spPerTick = 100.0 / 50;
-					e.X += (int)(e.Facing.X * (spPerTick*nticks)); 
-					e.Y += (int)(e.Facing.Y * (spPerTick*nticks));
-				}
-
-				GameObject seg = this.segments[e.ID];
-				float scale = (float)(e.Size) / (float)256.0;
-				seg.transform.localScale = new Vector3 (scale, scale, 1);
-				seg.transform.localPosition = new Vector3 (e.X, e.Y, 0);
-				continue;
-			}
-
-			if (e.EType == 1) // Head
-			{
-				double nticks = this.game.Tick - this.game.MasterTick;
-				e.X += (int)(e.Facing.X * (100.0 / (nticks*50.0)));
-				e.Y += (int)(e.Facing.Y * (100.0 / (nticks*50.0)));
-				GameObject seg = (GameObject)Instantiate(this.segmentPrefab, new Vector3(e.X, e.Y, 0), Quaternion.identity);
-				float scale = (float)(e.Size) / (float)256.0;
-				seg.transform.localScale = new Vector3 (scale, scale, 1);
-				seg.name = "head" + e.ID.ToString();
-				this.segments[e.ID] = seg;
-			}
-			else if (e.EType == 2) // Body segment
-			{
-				GameObject seg = (GameObject)Instantiate(this.segmentPrefab, new Vector3(e.X, e.Y, 0), Quaternion.identity);
-				float scale = (float)(e.Size) / (float)256.0;
-				seg.transform.localScale = new Vector3 (scale, scale, 1);
-				seg.name = "segment" + e.ID.ToString();
-				this.segments[e.ID] = seg; 
-			}
-
-		}
-		this.latencyText.text = "Latency: " + this.latencyms;
-		this.lastUpdate = DateTime.Now;
-		this.game.LastTickUpdated = this.game.Tick;
+            if (myfacing.X != (int)move.x || myfacing.Y != (int)move.y) {
+                myfacing.X = (int)move.x;
+                myfacing.Y = (int)move.y;
+                this.SetDirection(move);
+            }
+        }
 	}
 
 	void OnApplicationQuit()
@@ -141,6 +109,19 @@ public class ClientState : MonoBehaviour
 		this.net.sendNetPacket(MsgType.Login, login_msg);
 	}
 
+    public void SetDirection(Vector2 dir) {
+        SetDirection dir_msg = new SetDirection();
+        dir_msg.ID = this.mySnake;
+        dir_msg.TickID = this.game.Tick;
+        dir_msg.Facing = new Vect2();
+        dir_msg.Facing.X = (int)(dir.x);
+        dir_msg.Facing.Y = (int)dir.y;
+        
+        this.net.sendNetPacket(MsgType.SetDirection, dir_msg);
+    }
+
+
+    // Message processing
 	private void ParseAndProcess(NetPacket np)
 	{
 		INet parsedMsg = Messages.Parse(np.message_type, np.Content());
@@ -194,66 +175,161 @@ public class ClientState : MonoBehaviour
 				this.latencyms = hb.Latency;
 				this.net.sendNetPacket(MsgType.Heartbeat, parsedMsg);
 				break;
-			case MsgType.LoginResp:
-				LoginResp lr = ((LoginResp)parsedMsg);
-			// TODO
+            case MsgType.LoginResp:
+                LoginResp lr = ((LoginResp)parsedMsg);
+                if (lr.Success == 0)
+                {
+                    Debug.Log("Failed to login!");
+                }
+			    // TODO
 				break;
 			case MsgType.CreateAcctResp:
 				CreateAcctResp car = ((CreateAcctResp)parsedMsg);
-				this.account = car.AccountID;
+				this.accountID = car.AccountID;
 				break;
-			case MsgType.GameConnected:
-				GameConnected gc = ((GameConnected)parsedMsg);
-				this.game = new GameInstance ();
-				this.game.ID = gc.ID;
-				this.game.entities = gc.Entities;
-				this.game.StartTime = DateTime.Now - new TimeSpan((Int64)this.latencyms*10000);
-				this.game.Tick = gc.TickID;
+            case MsgType.GameConnected:
+                GameConnected gc = ((GameConnected)parsedMsg);
+                this.game = new GameInstance();
+                this.game.ID = gc.ID;
+                this.loadEntities(gc.Entities, gc.Snakes);
+                this.game.StartTime = DateTime.Now - new TimeSpan((Int64)this.latencyms * 10000);
+                this.game.StartTick = gc.TickID;
+                this.game.Tick = gc.TickID;
+                this.mySnake = gc.SnakeID;
 				break;
-			case MsgType.GameMasterFrame:
-				GameMasterFrame gmf = ((GameMasterFrame)parsedMsg);
-				Debug.Log ("masterframe for gameID:" + gmf.ID.ToString ());
-				Debug.Log ("Num entities" + gmf.Entities.Length);
-				this.game.entities = gmf.Entities;
-				Debug.Log ("Current tick: " + this.game.Tick + " Master Tick: " + gmf.Tick);
-				this.game.MasterTick = gmf.Tick;
+            case MsgType.GameMasterFrame:
+                GameMasterFrame gmf = ((GameMasterFrame)parsedMsg);
+                this.game.entities.Clear();
+                this.loadEntities(gmf.Entities, gmf.Snakes);
+                this.game.MasterTick = gmf.Tick;
 
 				// Now update local entities based on difference between master tick and now.
-				for (int i = 0; i < this.game.entities.Length; i++) {
-					Entity e = this.game.entities [i];
-					double nticks = this.game.Tick - this.game.MasterTick;
-					e.X += (int)(e.Facing.X * (100.0 / (nticks * 50.0)));
-					e.Y += (int)(e.Facing.Y * (100.0 / (nticks * 50.0)));
-				}
+                foreach (KeyValuePair<uint, PlayerSnake> entry in this.game.players)
+                {
+                    PlayerSnake snake = entry.Value;
+                    int nticks = (int)(this.game.Tick - this.game.MasterTick);
+                    snake.Move(nticks, this.game.TicksPerSecond);
+                }
+
+                Debug.Log("masterframe for gameID:" + gmf.ID.ToString());
+                Debug.Log("Current tick: " + this.game.Tick + " Master Tick: " + gmf.Tick);
                 break;
 		}
 	}
+
+    private void loadEntities(Entity[] ents, Snake[] snakes) {
+        foreach (Entity e in ents) {
+            this.game.entities[e.ID] = e;
+        }
+        foreach (Snake s in snakes) {
+            Entity head = this.game.entities[s.ID];
+            PlayerSnake ps = new PlayerSnake();
+            ps.ID = s.ID;
+            ps.speed = s.Speed;
+            ps.name = s.Name;
+            ps.segments = new Entity[s.Segments.Length+1];
+            ps.segments[0] = head;
+            for (int j = 0; j < s.Segments.Length; j++)
+            {
+                ps.segments[j+1] = this.game.entities[s.Segments[j]];
+            }
+            this.game.players[s.ID] = ps;
+        }
+    }
+
+    private bool updateGame() {
+        this.game.UpdateTick();
+
+        if (this.game.LastTickUpdated == this.game.Tick) {
+            return false;
+        }
+
+        // Either a) create new snake at location or b) update existing snake based on speed.
+        foreach(KeyValuePair<uint, PlayerSnake> entry in this.game.players) {
+            PlayerSnake snake = entry.Value;
+
+            int nticks = (int)(this.game.Tick - this.game.LastTickUpdated);
+            snake.Move(nticks, this.game.TicksPerSecond);
+
+            foreach (Entity e in snake.segments)
+            {
+                if (!this.segments.ContainsKey(e.ID))
+                {
+                    if (e.EType == 1) // Head
+                    {
+                        GameObject newseg = (GameObject)Instantiate(this.segmentPrefab, new Vector3(e.X, e.Y, 0), Quaternion.identity);
+                        newseg.name = "head" + e.ID.ToString();
+                        this.segments[e.ID] = newseg;
+                    }
+                    else if (e.EType == 2) // Body segment
+                    {
+                        GameObject newseg = (GameObject)Instantiate(this.segmentPrefab, new Vector3(e.X, e.Y, 0), Quaternion.identity);
+                        newseg.name = "segment" + e.ID.ToString();
+                        this.segments[e.ID] = newseg; 
+                    }
+                }
+                this.updateEntityPos(e);
+            }
+        }
+        this.updateCamera();
+        this.latencyText.text = "Latency: " + this.latencyms;
+        this.game.LastTickUpdated = this.game.Tick;
+        return true;
+    }
+
+    private void updateEntityPos(Entity e) {
+        GameObject segObj = this.segments[e.ID];
+        float scale = (float)(e.Size) / (float)256.0; // Image is 256x256.
+        segObj.transform.localScale = new Vector3(scale, scale, 1);
+        segObj.transform.localPosition = new Vector3(e.X, e.Y, 0);
+    }
+
+    private void updateCamera() 
+    {
+        Entity mysnake = this.game.entities[this.mySnake];
+        this.mainCam.transform.position = new Vector3(mysnake.X, mysnake.Y, -100);
+    }
 }
 
 public class GameInstance
 {
 	public uint ID;
 	public string Name;
-	public Entity[] entities;
-	public Player[] players; // List of players
+    public Dictionary<uint, Entity> entities = new Dictionary<uint, Entity>();
+    public Dictionary<uint, PlayerSnake> players = new Dictionary<uint, PlayerSnake>(); // List of players
 
+    public float TicksPerSecond = 50; // TODO: what do
+    public float TickLength = 20; // TODO: what do
+        
 	public uint LastTickUpdated;
 	public uint Tick;
 
 	public uint MasterTick;
 
-
 	public uint StartTick;
 	public DateTime StartTime;
 
 	public void UpdateTick() {
-		this.Tick = this.StartTick + (uint)( (DateTime.Now - this.StartTime).TotalMilliseconds / 20.0); // TODO: should this be hardcoded?
+		this.Tick = this.StartTick + (uint)( (DateTime.Now - this.StartTime).TotalMilliseconds / TickLength); // TODO: should this be hardcoded?
 	}
 }
 
-public class Player
+public class PlayerSnake
 {
 	public uint ID;
 	public string name;
+    public int speed;
 	public Entity[] segments;
+
+    public void Move(int nticks, float tickPerSecond)
+    {
+        for (int i = this.segments.Length - 1; i > 0; i--)
+        {
+            this.segments[i].X = this.segments[i - 1].X;
+            this.segments[i].Y = this.segments[i - 1].Y;
+        }
+        double spPerTick = ((float)this.speed) / tickPerSecond;
+        this.segments[0].X += (int)((this.segments[0].Facing.X * (spPerTick*nticks))/100.0); 
+        this.segments[0].Y += (int)((this.segments[0].Facing.Y * (spPerTick*nticks))/100.0);
+    }
 }

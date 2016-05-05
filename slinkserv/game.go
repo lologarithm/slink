@@ -29,7 +29,7 @@ type GameSession struct {
 
 	IntoGameManager chan<- GameMessage     // Game can only write to this channel, not read.
 	FromGameManager chan InternalMessage   // Messages from the game Manager.
-	FromNetwork     <-chan GameMessage     // FromNetwork is read only here, messages from players.
+	FromNetwork     chan GameMessage       // FromNetwork is read only here, messages from players.
 	ToNetwork       chan<- OutgoingMessage // Messages to players!
 
 	Exit   chan int
@@ -71,10 +71,11 @@ func (gw *GameWorld) EntitiesMsg() []*messages.Entity {
 // SnakesMsg converts all snakes in the world to a network message.
 func (gw *GameWorld) SnakesMsg() []*messages.Snake {
 	es := make([]*messages.Snake, len(gw.Snakes))
-	for idx, e := range gw.Snakes {
-		es[idx] = e.toSnakeMsg()
+	idx := 0
+	for _, snake := range gw.Snakes {
+		es[idx] = snake.toSnakeMsg()
+		idx++
 	}
-
 	return es
 }
 
@@ -84,10 +85,10 @@ func (gw *GameWorld) Tick() []Collision {
 			snake.Segments[i].Position = snake.Segments[i-1].Position
 		}
 		snake.Segments[0].Position = snake.Position
-		tickmv := int32(float64(snake.Speed) / gw.TicksPerSecond)
+		tickmv := (float64(snake.Speed) / gw.TicksPerSecond) / 100.0 // Dir vector normalizes to 100, so divide speed by 100
 		newpos := physics.Vect2{
-			X: snake.Position.X + snake.Facing.X*tickmv,
-			Y: snake.Position.Y + snake.Facing.Y*tickmv,
+			X: snake.Position.X + int32(float64(snake.Facing.X)*tickmv),
+			Y: snake.Position.Y + int32(float64(snake.Facing.Y)*tickmv),
 		}
 		snake.Position = newpos
 	}
@@ -136,25 +137,7 @@ func (g *GameSession) Run() {
 			case imsg := <-g.FromGameManager:
 				switch timsg := imsg.(type) {
 				case AddPlayer:
-					newid := uint32(len(g.World.Entities))
-					g.World.Snakes[newid] = NewSnake(newid)
-					g.World.Entities[newid] = g.World.Snakes[newid].Entity
-					for _, s := range g.World.Snakes[newid].Segments {
-						g.World.Entities[s.ID] = s
-					}
-					g.Clients[timsg.Client.ID] = &User{
-						Account: nil,
-						SnakeID: newid,
-						GameID:  g.ID,
-						Client:  timsg.Client,
-					}
-					cgr := &messages.GameConnected{
-						ID:       g.ID,
-						TickID:   g.World.TickID,
-						Entities: g.World.EntitiesMsg(),
-					}
-					outgoing := NewOutgoingMsg(timsg.Client, messages.GameConnectedMsgType, cgr)
-					timsg.Client.ToNetwork <- outgoing
+					g.addPlayer(timsg)
 				case RemovePlayer:
 					log.Printf("Disconnecting player: %d", timsg.Client.ID)
 					user := g.Clients[timsg.Client.ID]
@@ -178,10 +161,37 @@ func (g *GameSession) Run() {
 		// Now create a clone of the world to add to the historical world data
 		// Now scan through command history looking for old commands that are
 		// before the oldest stored tick state.
-		if g.World.TickID%100 == 0 {
+		if g.World.TickID%300 == 0 {
 			g.SendMasterFrame()
 		}
 	}
+}
+
+// addPlayer will create a snake, add it to the game, and return the successful connection message to the player.
+func (g *GameSession) addPlayer(ap AddPlayer) {
+	newid := uint32(len(g.World.Entities))
+	g.World.Snakes[newid] = NewSnake(newid)
+	g.World.Entities[newid] = g.World.Snakes[newid].Entity
+	for _, s := range g.World.Snakes[newid].Segments {
+		g.World.Entities[s.ID] = s
+	}
+	g.Clients[ap.Client.ID] = &User{
+		Account: nil,
+		SnakeID: newid,
+		GameID:  g.ID,
+		Client:  ap.Client,
+	}
+
+	cgr := &messages.GameConnected{
+		ID:       g.ID,
+		TickID:   g.World.TickID,
+		SnakeID:  newid,
+		Entities: g.World.EntitiesMsg(),
+		Snakes:   g.World.SnakesMsg(),
+	}
+
+	outgoing := NewOutgoingMsg(ap.Client, messages.GameConnectedMsgType, cgr)
+	ap.Client.ToNetwork <- outgoing
 }
 
 func (g *GameSession) setDirection(msg GameMessage) {
@@ -195,8 +205,8 @@ func (g *GameSession) setDirection(msg GameMessage) {
 
 	snake := g.World.Snakes[client.SnakeID]
 	snake.Facing = physics.Vect2{X: dirmsg.Facing.X, Y: dirmsg.Facing.Y}
-	snake.Facing = physics.NormalizeVect2(snake.Facing, 1)
-
+	snake.Facing = physics.NormalizeVect2(snake.Facing, 100)
+	// log.Printf("Setting snake %d to direction %d,%d", client.SnakeID, snake.Facing.X, snake.Facing.Y)
 	dirmsg.TickID = oldtick
 	dirmsg.ID = client.SnakeID
 	frame := messages.Frame{
@@ -242,14 +252,15 @@ func (g *GameSession) SendMasterFrame() {
 }
 
 // NewGame constructs a new game and starts it.
-func NewGame(toGameManager chan<- GameMessage, fromNetwork <-chan GameMessage, toNetwork chan<- OutgoingMessage) *GameSession {
+func NewGame(toGameManager chan<- GameMessage, toNetwork chan<- OutgoingMessage) *GameSession {
 	seed := uint64(rand.Uint32())
 	seed = seed << 32
 	seed += uint64(rand.Uint32())
+	netchan := make(chan GameMessage, 100)
 	g := &GameSession{
 		IntoGameManager: toGameManager,
 		FromGameManager: make(chan InternalMessage, 100),
-		FromNetwork:     fromNetwork,
+		FromNetwork:     netchan,
 		ToNetwork:       toNetwork,
 		World: &GameWorld{
 			Entities:       map[uint32]*Entity{},
@@ -277,6 +288,7 @@ func (s *Snake) toSnakeMsg() *messages.Snake {
 		ID:       s.ID,
 		Segments: segIDs,
 		Speed:    s.Speed,
+		Name:     s.Name,
 	}
 }
 
@@ -286,31 +298,34 @@ func NewSnake(id uint32) *Snake {
 		X: int32(rand.Intn(1000) - 500),
 		Y: int32(rand.Intn(1000) - 500),
 	}
-	return &Snake{
+	snake := &Snake{
 		Entity: &Entity{
 			ID:       id,
 			EType:    ETypeHead,
 			Position: pos,
 			Facing: physics.Vect2{
 				X: 0,
-				Y: 1,
+				Y: 100,
 			},
-			Size: 1000,
+			Size: 100,
 		},
-		Segments: []*Entity{
-			&Entity{
-				ID:          id + 1,
-				EType:       ETypeSegment,
-				ContainerID: id,
-				Position: physics.Vect2{
-					X: pos.X,
-					Y: pos.Y - 300,
-				},
-				Size: 1000,
-			},
-		},
-		Speed: 100,
+		Segments: []*Entity{},
+		Speed:    2000,
 	}
+	for i := 0; i < 10; i++ {
+		e := &Entity{
+			ID:          id + uint32(i+1),
+			EType:       ETypeSegment,
+			ContainerID: id,
+			Position: physics.Vect2{
+				X: pos.X,
+				Y: pos.Y - 25*int32(i+1),
+			},
+			Size: 100,
+		}
+		snake.Segments = append(snake.Segments, e)
+	}
+	return snake
 }
 
 // Entity represents a single object in the game.
@@ -341,12 +356,23 @@ func (e *Entity) toMsg() *messages.Entity {
 	return o
 }
 
-// Intersects calculates if two entities overlap -- used currently for chunk generation.
+// Intersects calculates if two entities overlap exactly.
+// Used as a more fine-grained check after the quadtree check.
 func (e *Entity) Intersects(o *Entity) bool {
 	// TODO: (R0-R1)^2 <= (x0-x1)^2+(y0-y1)^2 <= (R0+R1)^2
-	return true
+	xdiff := (e.Position.X - o.Position.X)
+	ydiff := (e.Position.Y - o.Position.Y)
+	centerdist := xdiff*xdiff + ydiff*ydiff
+
+	sizesum := e.Size + o.Size
+	// This means either intersects OR contains
+	return centerdist <= sizesum*sizesum
+
+	// sizediff := (e.Size - o.Size)
+	// return sizediff*sizediff <= centerdist // is the circle contained?
 }
 
+// BoundingBox is used for quadtree bounding checks.
 func (e *Entity) BoundingBox() quadtree.BoundingBox {
 	return quadtree.BoundingBox{
 		MinX: e.Position.X - e.Size,
@@ -356,10 +382,10 @@ func (e *Entity) BoundingBox() quadtree.BoundingBox {
 	}
 }
 
-// type BoundingBoxer interface {
-// 	BoundingBox() BoundingBox
-// 	BoxID() uint32
-// }
+// BoxID is used for quadtree intersection checks.
+func (e *Entity) BoxID() uint32 {
+	return e.ID
+}
 
 // GameMessage is a message from a client to a game.
 type GameMessage struct {

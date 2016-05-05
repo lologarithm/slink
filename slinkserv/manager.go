@@ -93,7 +93,6 @@ func (gm *GameManager) joinGame(msg GameMessage) {
 	}
 
 	g := gm.Games[gm.NextGameID]
-
 	g.FromGameManager <- AddPlayer{
 		Entity: &Entity{
 			Name: gm.Users[msg.client.ID].Account.Name,
@@ -101,13 +100,17 @@ func (gm *GameManager) joinGame(msg GameMessage) {
 		Client: msg.client,
 	}
 	gm.Users[msg.client.ID].GameID = msg.client.ID
+
+	msg.client.FromGameManager <- ConnectedGame{
+		ToGame: g.FromNetwork,
+		ID:     msg.client.ID,
+	}
 }
 
 func (gm *GameManager) createGame(msg GameMessage) {
 	gm.NextGameID++
 
-	netchan := make(chan GameMessage, 100)
-	g := NewGame(gm.FromGames, netchan, gm.ToNetwork)
+	g := NewGame(gm.FromGames, gm.ToNetwork)
 	g.ID = gm.NextGameID
 	go g.Run()
 

@@ -221,12 +221,14 @@ public class JoinGame : INet {
 
 public class GameConnected : INet {
 	public uint ID;
+	public uint SnakeID;
 	public uint TickID;
 	public Entity[] Entities;
 	public Snake[] Snakes;
 
 	public void Serialize(BinaryWriter buffer) {
 		buffer.Write(this.ID);
+		buffer.Write(this.SnakeID);
 		buffer.Write(this.TickID);
 		buffer.Write((Int32)this.Entities.Length);
 		for (int v2 = 0; v2 < this.Entities.Length; v2++) {
@@ -240,16 +242,17 @@ public class GameConnected : INet {
 
 	public void Deserialize(BinaryReader buffer) {
 		this.ID = buffer.ReadUInt32();
+		this.SnakeID = buffer.ReadUInt32();
 		this.TickID = buffer.ReadUInt32();
-		int l2_1 = buffer.ReadInt32();
-		this.Entities = new Entity[l2_1];
-		for (int v2 = 0; v2 < l2_1; v2++) {
+		int l3_1 = buffer.ReadInt32();
+		this.Entities = new Entity[l3_1];
+		for (int v2 = 0; v2 < l3_1; v2++) {
 			this.Entities[v2] = new Entity();
 			this.Entities[v2].Deserialize(buffer);
 		}
-		int l3_1 = buffer.ReadInt32();
-		this.Snakes = new Snake[l3_1];
-		for (int v2 = 0; v2 < l3_1; v2++) {
+		int l4_1 = buffer.ReadInt32();
+		this.Snakes = new Snake[l4_1];
+		for (int v2 = 0; v2 < l4_1; v2++) {
 			this.Snakes[v2] = new Snake();
 			this.Snakes[v2].Deserialize(buffer);
 		}
@@ -326,11 +329,14 @@ public class Entity : INet {
 
 public class Snake : INet {
 	public uint ID;
+	public string Name;
 	public uint[] Segments;
 	public int Speed;
 
 	public void Serialize(BinaryWriter buffer) {
 		buffer.Write(this.ID);
+		buffer.Write((Int32)this.Name.Length);
+		buffer.Write(System.Text.Encoding.UTF8.GetBytes(this.Name));
 		buffer.Write((Int32)this.Segments.Length);
 		for (int v2 = 0; v2 < this.Segments.Length; v2++) {
 			buffer.Write(this.Segments[v2]);
@@ -341,8 +347,11 @@ public class Snake : INet {
 	public void Deserialize(BinaryReader buffer) {
 		this.ID = buffer.ReadUInt32();
 		int l1_1 = buffer.ReadInt32();
-		this.Segments = new uint[l1_1];
-		for (int v2 = 0; v2 < l1_1; v2++) {
+		byte[] temp1_1 = buffer.ReadBytes(l1_1);
+		this.Name = System.Text.Encoding.UTF8.GetString(temp1_1);
+		int l2_1 = buffer.ReadInt32();
+		this.Segments = new uint[l2_1];
+		for (int v2 = 0; v2 < l2_1; v2++) {
 			this.Segments[v2] = buffer.ReadUInt32();
 		}
 		this.Speed = buffer.ReadInt32();

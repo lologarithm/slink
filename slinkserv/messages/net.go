@@ -300,6 +300,7 @@ func (m *JoinGame) Len() int {
 
 type GameConnected struct {
 	ID uint32
+	SnakeID uint32
 	TickID uint32
 	Entities []*Entity
 	Snakes []*Snake
@@ -307,6 +308,7 @@ type GameConnected struct {
 
 func (m *GameConnected) Serialize(buffer *bytes.Buffer) {
 	binary.Write(buffer, binary.LittleEndian, m.ID)
+	binary.Write(buffer, binary.LittleEndian, m.SnakeID)
 	binary.Write(buffer, binary.LittleEndian, m.TickID)
 	binary.Write(buffer, binary.LittleEndian, int32(len(m.Entities)))
 	for _, v2 := range m.Entities {
@@ -320,18 +322,19 @@ func (m *GameConnected) Serialize(buffer *bytes.Buffer) {
 
 func (m *GameConnected) Deserialize(buffer *bytes.Buffer) {
 	binary.Read(buffer, binary.LittleEndian, &m.ID)
+	binary.Read(buffer, binary.LittleEndian, &m.SnakeID)
 	binary.Read(buffer, binary.LittleEndian, &m.TickID)
-	var l2_1 int32
-	binary.Read(buffer, binary.LittleEndian, &l2_1)
-	m.Entities = make([]*Entity, l2_1)
-	for i := 0; i < int(l2_1); i++ {
+	var l3_1 int32
+	binary.Read(buffer, binary.LittleEndian, &l3_1)
+	m.Entities = make([]*Entity, l3_1)
+	for i := 0; i < int(l3_1); i++ {
 		m.Entities[i] = new(Entity)
 		m.Entities[i].Deserialize(buffer)
 	}
-	var l3_1 int32
-	binary.Read(buffer, binary.LittleEndian, &l3_1)
-	m.Snakes = make([]*Snake, l3_1)
-	for i := 0; i < int(l3_1); i++ {
+	var l4_1 int32
+	binary.Read(buffer, binary.LittleEndian, &l4_1)
+	m.Snakes = make([]*Snake, l4_1)
+	for i := 0; i < int(l4_1); i++ {
 		m.Snakes[i] = new(Snake)
 		m.Snakes[i].Deserialize(buffer)
 	}
@@ -339,6 +342,7 @@ func (m *GameConnected) Deserialize(buffer *bytes.Buffer) {
 
 func (m *GameConnected) Len() int {
 	mylen := 0
+	mylen += 4
 	mylen += 4
 	mylen += 4
 	mylen += 4
@@ -459,12 +463,15 @@ func (m *Entity) Len() int {
 
 type Snake struct {
 	ID uint32
+	Name string
 	Segments []uint32
 	Speed int32
 }
 
 func (m *Snake) Serialize(buffer *bytes.Buffer) {
 	binary.Write(buffer, binary.LittleEndian, m.ID)
+	binary.Write(buffer, binary.LittleEndian, int32(len(m.Name)))
+	buffer.WriteString(m.Name)
 	binary.Write(buffer, binary.LittleEndian, int32(len(m.Segments)))
 	for _, v2 := range m.Segments {
 		binary.Write(buffer, binary.LittleEndian, v2)
@@ -476,8 +483,13 @@ func (m *Snake) Deserialize(buffer *bytes.Buffer) {
 	binary.Read(buffer, binary.LittleEndian, &m.ID)
 	var l1_1 int32
 	binary.Read(buffer, binary.LittleEndian, &l1_1)
-	m.Segments = make([]uint32, l1_1)
-	for i := 0; i < int(l1_1); i++ {
+	temp1_1 := make([]byte, l1_1)
+	buffer.Read(temp1_1)
+	m.Name = string(temp1_1)
+	var l2_1 int32
+	binary.Read(buffer, binary.LittleEndian, &l2_1)
+	m.Segments = make([]uint32, l2_1)
+	for i := 0; i < int(l2_1); i++ {
 		binary.Read(buffer, binary.LittleEndian, &m.Segments[i])
 	}
 	binary.Read(buffer, binary.LittleEndian, &m.Speed)
@@ -486,6 +498,7 @@ func (m *Snake) Deserialize(buffer *bytes.Buffer) {
 func (m *Snake) Len() int {
 	mylen := 0
 	mylen += 4
+	mylen += 4 + len(m.Name)
 	mylen += 4
 	for _, v2 := range m.Segments {
 	_ = v2

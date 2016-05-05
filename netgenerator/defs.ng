@@ -43,6 +43,7 @@ class JoinGame {
 
 class GameConnected {
  ID uint32
+ SnakeID uint32
  TickID uint32
  Entities []*Entity
  Snakes []*Snake
@@ -67,6 +68,7 @@ class Entity {
 
 class Snake {
  ID uint32
+ Name string
  Segments []uint32
  Speed int32
 }

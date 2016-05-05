@@ -132,11 +132,6 @@ func (bp *BytePipe) Read(b []byte) int {
 func (bp *BytePipe) Close() {
 	atomic.StoreUint32(&bp.s, 0)
 
-	bp.wc.L.Lock()
 	bp.wc.Signal()
-	bp.wc.L.Unlock()
-
-	bp.rc.L.Lock()
 	bp.rc.Signal()
-	bp.rc.L.Unlock()
 }
