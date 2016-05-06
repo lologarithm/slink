@@ -2,7 +2,7 @@
   <MonoDevelop.Ide.Workspace ActiveConfiguration="Debug" />
   <MonoDevelop.Ide.Workbench ActiveDocument="Assets/Scripts/ClientState.cs">
     <Files>
-      <File FileName="Assets/Scripts/ClientState.cs" Line="326" Column="13" />
+      <File FileName="Assets/Scripts/ClientState.cs" Line="322" Column="27" />
     </Files>
   </MonoDevelop.Ide.Workbench>
   <MonoDevelop.Ide.DebuggingService.Breakpoints>
