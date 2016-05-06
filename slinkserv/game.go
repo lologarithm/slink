@@ -36,9 +36,9 @@ type GameSession struct {
 	Status GameStatus
 
 	// Private
-	World          *GameWorld    // Current world state
-	prevWorlds     []*GameWorld  // Last X seconds of game states
-	commandHistory []interface{} // Last X seconds of commands
+	World          *GameWorld     // Current world state
+	prevWorlds     [50]*GameWorld // Last 1 second of game states
+	commandHistory []GameMessage  // Last 1 second of commands
 }
 
 // GameWorld represents all the data in the world.
@@ -97,6 +97,7 @@ func (gw *GameWorld) Tick() []Collision {
 	// 1. check quad tree for possible bounding box collisions
 	// 2. actually calculate exact distance and see if circles collide.
 	// The only collisions that matter are snake heads!
+
 	// If head touches body, head dies
 	// If head touches head, bigger head wins.
 
@@ -142,11 +143,20 @@ func (g *GameSession) Run() {
 					log.Printf("Disconnecting player: %d", timsg.Client.ID)
 					user := g.Clients[timsg.Client.ID]
 					delete(g.Clients, timsg.Client.ID)
+
 					snake := g.World.Snakes[user.SnakeID]
+
+					// Remove snake from entities and tree
 					delete(g.World.Entities, snake.ID)
+					g.World.Tree.Remove(snake.Entity)
+
+					// Remove all segments
 					for _, v := range snake.Segments {
+						g.World.Tree.Remove(v)
 						delete(g.World.Entities, v.ID)
 					}
+
+					// Now remove the snake itself.
 					delete(g.World.Snakes, snake.ID)
 				}
 			case <-g.Exit:
@@ -172,9 +182,13 @@ func (g *GameSession) addPlayer(ap AddPlayer) {
 	newid := uint32(len(g.World.Entities))
 	g.World.Snakes[newid] = NewSnake(newid)
 	g.World.Entities[newid] = g.World.Snakes[newid].Entity
+	g.World.Tree.Add(g.World.Snakes[newid].Entity)
+
 	for _, s := range g.World.Snakes[newid].Segments {
 		g.World.Entities[s.ID] = s
+		g.World.Tree.Add(s)
 	}
+
 	g.Clients[ap.Client.ID] = &User{
 		Account: nil,
 		SnakeID: newid,
@@ -266,6 +280,12 @@ func NewGame(toGameManager chan<- GameMessage, toNetwork chan<- OutgoingMessage)
 			Entities:       map[uint32]*Entity{},
 			Snakes:         map[uint32]*Snake{},
 			TicksPerSecond: 50,
+			Tree: quadtree.NewQuadTree(quadtree.BoundingBox{
+				MinX: -1000000,
+				MaxX: 1000000,
+				MinY: -1000000,
+				MaxY: 1000000,
+			}),
 		},
 		Exit:    make(chan int, 1),
 		Clients: make(map[uint32]*User, 16),
