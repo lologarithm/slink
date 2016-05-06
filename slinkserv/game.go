@@ -36,9 +36,12 @@ type GameSession struct {
 	Status GameStatus
 
 	// Private
-	World          *GameWorld     // Current world state
+	World *GameWorld // Current world state
+
+	// Historical state
 	prevWorlds     [50]*GameWorld // Last 1 second of game states
-	commandHistory []GameMessage  // Last 1 second of commands
+	prevHead       uint32
+	commandHistory []GameMessage // Last 1 second of commands
 }
 
 // GameWorld represents all the data in the world.
@@ -52,17 +55,49 @@ type GameWorld struct {
 	TickLength     float64
 }
 
+func NewWorld() *GameWorld {
+	ticks := 50.0
+	tickLength := 1000.0 / ticks
+	return &GameWorld{
+		Entities:       map[uint32]*Entity{},
+		Snakes:         map[uint32]*Snake{},
+		TicksPerSecond: ticks,
+		TickLength:     tickLength,
+		Tree: quadtree.NewQuadTree(quadtree.BoundingBox{
+			MinX: -1000000,
+			MaxX: 1000000,
+			MinY: -1000000,
+			MaxY: 1000000,
+		}),
+	}
+}
+
 // Clone returns a deep copy of the game world at this time.
 func (gw *GameWorld) Clone() *GameWorld {
-	// TODO: make this work.
-	return &GameWorld{}
+	nw := NewWorld()
+	for k, e := range gw.Entities {
+		ne := &Entity{}
+		*ne = *e
+		nw.Entities[k] = ne
+		nw.Tree.Add(ne)
+	}
+
+	for k, s := range gw.Snakes {
+		ns := &Snake{}
+		*ns = *s
+		*ns.Entity = *s.Entity
+		nw.Snakes[k] = ns
+	}
+	return nw
 }
 
 // EntitiesMsg converts all entities in the world to a network message.
 func (gw *GameWorld) EntitiesMsg() []*messages.Entity {
 	es := make([]*messages.Entity, len(gw.Entities))
-	for idx, e := range gw.Entities {
+	idx := 0
+	for _, e := range gw.Entities {
 		es[idx] = e.toMsg()
+		idx++
 	}
 
 	return es
@@ -105,6 +140,75 @@ func (gw *GameWorld) Tick() []Collision {
 	return nil
 }
 
+func (g *GameSession) replayHistory(ticks uint32) {
+	for i := uint32(0); i < ticks; i++ {
+		// 1. Apply and commands from this tick
+		for _, msg := range g.commandHistory {
+			if msg.currentTick == g.World.TickID {
+				g.applyCommand(msg, false)
+			}
+		}
+		// 2. call tick
+		g.World.Tick()
+		// 3.
+		g.createHistoryPoint()
+	}
+}
+
+func (g *GameSession) applyCommand(msg GameMessage, echo bool) {
+	switch msg.mtype {
+	case messages.SetDirectionMsgType:
+		dirmsg := msg.net.(*messages.SetDirection)
+		g.setDirection(dirmsg.Facing, dirmsg.ID)
+		if echo {
+			frame := messages.Frame{
+				// Seq Doesn't matter because its set by server when its sent.
+				MsgType:       messages.SetDirectionMsgType,
+				ContentLength: uint16(dirmsg.Len()),
+			}
+			g.sendToAll(OutgoingMessage{
+				msg: messages.Packet{
+					Frame:  frame,
+					NetMsg: dirmsg,
+				},
+			})
+		}
+	case messages.DisconnectedMsgType:
+		s := g.World.Snakes[msg.clientID]
+		g.removeSnake(s)
+	default:
+		fmt.Printf("game.go:Run(): UNKNOWN MESSAGE TYPE: %T\n", msg)
+	}
+}
+
+func (g *GameSession) createHistoryPoint() {
+	g.prevWorlds[g.prevHead] = g.World.Clone()
+	g.prevHead++
+	if g.prevHead == 50 {
+		g.prevHead = 0 // ring buffer!
+	}
+}
+
+func (g *GameSession) resetToHistory(u *User) uint32 {
+	lat := atomic.LoadInt64(&u.Client.latency)
+	ticklag := uint32(float64(lat) / g.World.TickLength)
+	if ticklag > 50 {
+		ticklag = 50
+	}
+	// Reset world back a bit.
+	if ticklag > 0 {
+		if g.World.TickID < ticklag {
+			ticklag = g.World.TickID
+		}
+		laghead := g.prevHead - ticklag
+		if laghead < 0 {
+			laghead += 50
+		}
+		g.World = g.prevWorlds[laghead].Clone()
+	}
+	return ticklag
+}
+
 type Collision struct {
 	Entity1 *Entity
 	Entity2 *Entity
@@ -112,7 +216,6 @@ type Collision struct {
 
 // Run starts the game!
 func (g *GameSession) Run() {
-	g.World.TickLength = 1000.0 / g.World.TicksPerSecond
 	waiting := true
 	waitms := int64(float64(time.Millisecond) * g.World.TickLength)
 	nextTick := time.Now().UTC().UnixNano() + waitms
@@ -120,6 +223,22 @@ func (g *GameSession) Run() {
 	var timeout time.Duration
 	for {
 		waiting = true
+
+		// Now create a clone of the world to add to the historical world data
+		g.createHistoryPoint()
+
+		// Now scan through command history looking for old commands that are
+		// before the oldest stored tick state.
+		newHist := make([]GameMessage, len(g.commandHistory))
+		hidx := 0
+		for _, m := range g.commandHistory {
+			if m.currentTick >= g.World.TickID-50 {
+				newHist[hidx] = m
+				hidx++
+			}
+		}
+		g.commandHistory = newHist[:hidx]
+
 		// figure out timeout before each waiting loop.
 		timeout = time.Duration(nextTick - time.Now().UTC().UnixNano())
 		for waiting {
@@ -129,35 +248,51 @@ func (g *GameSession) Run() {
 				nextTick += waitms // Set next tick exactly
 				break
 			case msg := <-g.FromNetwork:
-				switch msg.mtype {
-				case messages.SetDirectionMsgType:
-					g.setDirection(msg)
-				default:
-					fmt.Printf("game.go:Run(): UNKNOWN MESSAGE TYPE: %T\n", msg)
+				msg.currentTick = g.World.TickID
+
+				// First check if this message is out of date!
+				isOld := false
+				for _, m := range g.commandHistory {
+					if m.clientID == msg.clientID && m.mtype == msg.mtype {
+						if m.currentTick >= msg.currentTick {
+							isOld = true
+							break
+						}
+					}
 				}
+				if isOld {
+					// Exit this msg processing now.
+					break
+				}
+				client := g.Clients[msg.clientID]
+				if client == nil {
+					break // Client is no longer connected.
+				}
+				ticklag := g.resetToHistory(client)
+
+				// Apply the new message
+				g.applyCommand(msg, true)
+
+				// Now replay history!
+				g.replayHistory(ticklag)
+				g.commandHistory = append(g.commandHistory, msg)
 			case imsg := <-g.FromGameManager:
 				switch timsg := imsg.(type) {
 				case AddPlayer:
 					g.addPlayer(timsg)
 				case RemovePlayer:
-					log.Printf("Disconnecting player: %d", timsg.Client.ID)
+					log.Printf("Removing player %d from game %d.", timsg.Client.ID, g.ID)
 					user := g.Clients[timsg.Client.ID]
 					delete(g.Clients, timsg.Client.ID)
 
 					snake := g.World.Snakes[user.SnakeID]
-
-					// Remove snake from entities and tree
-					delete(g.World.Entities, snake.ID)
-					g.World.Tree.Remove(snake.Entity)
-
-					// Remove all segments
-					for _, v := range snake.Segments {
-						g.World.Tree.Remove(v)
-						delete(g.World.Entities, v.ID)
+					g.removeSnake(snake)
+					removecmd := GameMessage{
+						clientID:    snake.ID,
+						mtype:       messages.DisconnectedMsgType,
+						currentTick: g.World.TickID,
 					}
-
-					// Now remove the snake itself.
-					delete(g.World.Snakes, snake.ID)
+					g.commandHistory = append(g.commandHistory, removecmd)
 				}
 			case <-g.Exit:
 				fmt.Print("EXITING: Run in Game.go\n")
@@ -168,19 +303,32 @@ func (g *GameSession) Run() {
 		for range collisions {
 
 		}
-		// Now create a clone of the world to add to the historical world data
-		// Now scan through command history looking for old commands that are
-		// before the oldest stored tick state.
 		if g.World.TickID%300 == 0 {
 			g.SendMasterFrame()
 		}
 	}
 }
 
+func (g *GameSession) removeSnake(snake *Snake) {
+	// Remove snake from entities and tree
+	delete(g.World.Entities, snake.ID)
+	g.World.Tree.Remove(snake.Entity)
+
+	// Remove all segments
+	for _, v := range snake.Segments {
+		g.World.Tree.Remove(v)
+		delete(g.World.Entities, v.ID)
+	}
+
+	// Now remove the snake itself.
+	delete(g.World.Snakes, snake.ID)
+
+}
+
 // addPlayer will create a snake, add it to the game, and return the successful connection message to the player.
 func (g *GameSession) addPlayer(ap AddPlayer) {
 	newid := uint32(len(g.World.Entities))
-	g.World.Snakes[newid] = NewSnake(newid)
+	g.World.Snakes[newid] = NewSnake(newid, ap.Entity.Name)
 	g.World.Entities[newid] = g.World.Snakes[newid].Entity
 	g.World.Tree.Add(g.World.Snakes[newid].Entity)
 
@@ -208,32 +356,11 @@ func (g *GameSession) addPlayer(ap AddPlayer) {
 	ap.Client.ToNetwork <- outgoing
 }
 
-func (g *GameSession) setDirection(msg GameMessage) {
-	dirmsg := msg.net.(*messages.SetDirection)
-
-	client := g.Clients[msg.client.ID]
-	lat := atomic.LoadInt64(&client.Client.latency)
-	oldtick := g.World.TickID - uint32(float64(lat)/g.World.TickLength)
+func (g *GameSession) setDirection(facing *messages.Vect2, snakeID uint32) {
 	// TODO: Allow a maximum turn rate so it can't just snap any direction
-	// TODO: Apply facing change request at old tick instead of 'now'
-
-	snake := g.World.Snakes[client.SnakeID]
-	snake.Facing = physics.Vect2{X: dirmsg.Facing.X, Y: dirmsg.Facing.Y}
+	snake := g.World.Snakes[snakeID]
+	snake.Facing = physics.Vect2{X: facing.X, Y: facing.Y}
 	snake.Facing = physics.NormalizeVect2(snake.Facing, 100)
-	// log.Printf("Setting snake %d to direction %d,%d", client.SnakeID, snake.Facing.X, snake.Facing.Y)
-	dirmsg.TickID = oldtick
-	dirmsg.ID = client.SnakeID
-	frame := messages.Frame{
-		// Seq Doesn't matter because its set by server when its sent.
-		MsgType:       messages.SetDirectionMsgType,
-		ContentLength: uint16(dirmsg.Len()),
-	}
-	g.sendToAll(OutgoingMessage{
-		msg: messages.Packet{
-			Frame:  frame,
-			NetMsg: dirmsg,
-		},
-	})
 }
 
 func (g *GameSession) sendToAll(msg OutgoingMessage) {
@@ -276,19 +403,10 @@ func NewGame(toGameManager chan<- GameMessage, toNetwork chan<- OutgoingMessage)
 		FromGameManager: make(chan InternalMessage, 100),
 		FromNetwork:     netchan,
 		ToNetwork:       toNetwork,
-		World: &GameWorld{
-			Entities:       map[uint32]*Entity{},
-			Snakes:         map[uint32]*Snake{},
-			TicksPerSecond: 50,
-			Tree: quadtree.NewQuadTree(quadtree.BoundingBox{
-				MinX: -1000000,
-				MaxX: 1000000,
-				MinY: -1000000,
-				MaxY: 1000000,
-			}),
-		},
-		Exit:    make(chan int, 1),
-		Clients: make(map[uint32]*User, 16),
+		World:           NewWorld(),
+		Exit:            make(chan int, 1),
+		Clients:         make(map[uint32]*User, 16),
+		commandHistory:  make([]GameMessage, 0, 10),
 	}
 	return g
 }
@@ -313,7 +431,7 @@ func (s *Snake) toSnakeMsg() *messages.Snake {
 }
 
 // NewSnake creates a new snake at a random location.
-func NewSnake(id uint32) *Snake {
+func NewSnake(id uint32, name string) *Snake {
 	pos := physics.Vect2{
 		X: int32(rand.Intn(1000) - 500),
 		Y: int32(rand.Intn(1000) - 500),
@@ -328,6 +446,7 @@ func NewSnake(id uint32) *Snake {
 				Y: 100,
 			},
 			Size: 100,
+			Name: name,
 		},
 		Segments: []*Entity{},
 		Speed:    2000,
@@ -409,9 +528,11 @@ func (e *Entity) BoxID() uint32 {
 
 // GameMessage is a message from a client to a game.
 type GameMessage struct {
-	net    messages.Net
-	client *Client
-	mtype  messages.MessageType
+	net         messages.Net
+	client      *Client
+	mtype       messages.MessageType
+	currentTick uint32 // Tick when the game processed this mesage.
+	clientID    uint32 // ID of client. Cached so you can clear client.
 }
 
 // InternalMessage is for messages between internal components (gamesession and gamemanager) that never leaves the server.

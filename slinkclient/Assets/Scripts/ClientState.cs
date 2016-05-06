@@ -8,6 +8,7 @@ using UnityEngine.UI;
 public class ClientState : MonoBehaviour
 {
 	public GameObject segmentPrefab;
+    public GameObject segnamePrefab;
 	public string serverAddress;
 	public int serverPort;
 	public GameObject latencyTextContainer;
@@ -39,7 +40,12 @@ public class ClientState : MonoBehaviour
         // TODO: allow handoff of network messenger from another scene?
         // Or do we pass the entire client state manager from scene to scene?
 		net = new NetworkMessenger(this.message_queue, serverAddress, serverPort);
-		this.CreateAccount("asdf", "asdf");
+        string name = PlayerPrefs.GetString("name");
+        if (name == "" || name == null)
+        {
+            name = "Random Name lol";
+        }
+        this.CreateAccount(name, name);
 		this.JoinGame();
 	}
         
@@ -260,6 +266,12 @@ public class ClientState : MonoBehaviour
                         GameObject newseg = (GameObject)Instantiate(this.segmentPrefab, new Vector3(e.X, e.Y, 0), Quaternion.identity);
                         newseg.name = "head" + e.ID.ToString();
                         this.segments[e.ID] = newseg;
+
+                        GameObject segname = (GameObject)Instantiate(this.segnamePrefab, new Vector3(0, 0, -1), Quaternion.identity);
+                        TextMesh tm = segname.GetComponent<TextMesh>();
+                        tm.text = snake.name;
+                        segname.transform.parent = newseg.transform;
+                        segname.transform.localPosition = new Vector3(0, 0, -1);
                     }
                     else if (e.EType == 2) // Body segment
                     {
@@ -288,6 +300,13 @@ public class ClientState : MonoBehaviour
     {
         Entity mysnake = this.game.entities[this.mySnake];
         this.mainCam.transform.position = new Vector3(mysnake.X, mysnake.Y, -100);
+
+        float screenAspect = (float)Screen.width / (float)Screen.height;
+        float cameraHeight = this.mainCam.orthographicSize * 2;
+        float cameraWidth = cameraHeight * screenAspect;
+
+        var horzBacks = cameraWidth / 2000;
+        var vertBacks = cameraHeight / 2000;
     }
 }
 

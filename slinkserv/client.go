@@ -169,13 +169,13 @@ func (client *Client) ProcessBytes(disconClient chan Client) {
 				}
 				atomic.StoreInt64(&client.latency, avgPings)
 			case messages.CreateAcctMsgType, messages.LoginMsgType, messages.JoinGameMsgType:
-				client.toGameManager <- GameMessage{net: packet.NetMsg, client: client, mtype: packet.Frame.MsgType}
+				client.toGameManager <- GameMessage{net: packet.NetMsg, client: client, mtype: packet.Frame.MsgType, clientID: client.ID}
 			default:
 				if client.activeGame == nil {
 					log.Printf("Client sent message (%d:%v) before in a game!", packet.Frame.MsgType, packet.NetMsg)
 					break
 				}
-				client.activeGame.toGame <- GameMessage{net: packet.NetMsg, client: client, mtype: packet.Frame.MsgType}
+				client.activeGame.toGame <- GameMessage{net: packet.NetMsg, client: client, mtype: packet.Frame.MsgType, clientID: client.ID}
 			}
 
 			// Remove the used bytes from the buffer.

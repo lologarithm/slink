@@ -91,19 +91,20 @@ func (gm *GameManager) joinGame(msg GameMessage) {
 	if len(gm.Games) == 0 {
 		gm.createGame(msg)
 	}
+	gameID := uint32(1) // TODO: scale multiple games!
 
-	g := gm.Games[gm.NextGameID]
+	g := gm.Games[gameID]
 	g.FromGameManager <- AddPlayer{
 		Entity: &Entity{
 			Name: gm.Users[msg.client.ID].Account.Name,
 		},
 		Client: msg.client,
 	}
-	gm.Users[msg.client.ID].GameID = msg.client.ID
+	gm.Users[msg.client.ID].GameID = gameID
 
 	msg.client.FromGameManager <- ConnectedGame{
 		ToGame: g.FromNetwork,
-		ID:     msg.client.ID,
+		ID:     gameID,
 	}
 }
 
@@ -130,9 +131,11 @@ func (gm *GameManager) handleConnection(msg GameMessage) {
 }
 
 func (gm *GameManager) handleDisconnect(msg GameMessage) {
+	log.Printf("GM: handling disconnect now: %d", msg.client.ID)
 	// message active game that player disconnected.
 	gameid := gm.Users[msg.client.ID].GameID
 	if gm.Games[gameid] != nil {
+		log.Printf("Signalling game %d to remove player %d.", gameid, msg.client.ID)
 		gm.Games[gameid].FromGameManager <- RemovePlayer{Client: msg.client}
 	}
 	// Then clear out the user.
@@ -145,7 +148,7 @@ func (gm *GameManager) createAccount(msg GameMessage) {
 		AccountID: 0,
 		Name:      netmsg.Name,
 	}
-
+	log.Printf("Trying to login: %s", netmsg.Name)
 	if _, ok := gm.AcctByName[netmsg.Name]; !ok {
 		gm.AccountID++
 		gm.Accounts[gm.AccountID] = &Account{
@@ -158,6 +161,7 @@ func (gm *GameManager) createAccount(msg GameMessage) {
 
 		gm.AcctByName[netmsg.Name] = gm.Accounts[gm.AccountID]
 		gm.Users[msg.client.ID].Account = gm.Accounts[gm.AccountID]
+		log.Printf("logged in: %s", netmsg.Name)
 	}
 
 	resp := NewOutgoingMsg(msg.client, messages.CreateAcctRespMsgType, ac)

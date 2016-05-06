@@ -59,7 +59,7 @@ func (s *Server) handleMessage() {
 }
 
 func (s *Server) DisconnectConn(addrkey string) {
-	fmt.Printf("  Closing connection for client: %d.\n", s.connections[addrkey].ID)
+	// fmt.Printf("  Closing connection for client: %d.\n", s.connections[addrkey].ID)
 	s.connections[addrkey].FromNetwork.Close()
 	delete(s.connections, addrkey)
 }
