@@ -116,16 +116,26 @@ func (gw *GameWorld) SnakesMsg() []*messages.Snake {
 
 func (gw *GameWorld) Tick() []Collision {
 	for _, snake := range gw.Snakes {
-		for i := len(snake.Segments) - 1; i != 0; i-- {
-			snake.Segments[i].Position = snake.Segments[i-1].Position
-		}
-		snake.Segments[0].Position = snake.Position
+		snakeDist := snake.Size / 2
 		tickmv := (float64(snake.Speed) / gw.TicksPerSecond) / 100.0 // Dir vector normalizes to 100, so divide speed by 100
+		prevface := snake.Facing
 		newpos := physics.Vect2{
 			X: snake.Position.X + int32(float64(snake.Facing.X)*tickmv),
 			Y: snake.Position.Y + int32(float64(snake.Facing.Y)*tickmv),
 		}
 		snake.Position = newpos
+
+		for _, seg := range snake.Segments {
+			movevect := prevface
+			movevect = physics.NormalizeVect2(movevect, snakeDist)
+
+			newpos = physics.Vect2{
+				X: newpos.X - movevect.X,
+				Y: newpos.Y - movevect.Y,
+			}
+			seg.Position = newpos
+			seg.Facing, prevface = prevface, seg.Facing
+		}
 	}
 
 	// TODO: calculate collisions!
@@ -139,6 +149,10 @@ func (gw *GameWorld) Tick() []Collision {
 	gw.TickID++
 	return nil
 }
+
+// func Bezier2(start physics.Vect2, control physics.Vect2, end physics.Vect2, t int32) physics.Vect2 {
+// 	return physics.AddVect2(physics.AddVect2(physics.MultVect2(start, ((1-t)*(1-t))), physics.MultVect2(control, 2 * t * (1 - t))), physics.MultVect2(end, (t * t));
+// }
 
 func (g *GameSession) replayHistory(ticks uint32) {
 	for i := uint32(0); i < ticks; i++ {
@@ -303,7 +317,7 @@ func (g *GameSession) Run() {
 		for range collisions {
 
 		}
-		if g.World.TickID%300 == 0 {
+		if g.World.TickID%100 == 0 {
 			g.SendMasterFrame()
 		}
 	}
@@ -433,8 +447,8 @@ func (s *Snake) toSnakeMsg() *messages.Snake {
 // NewSnake creates a new snake at a random location.
 func NewSnake(id uint32, name string) *Snake {
 	pos := physics.Vect2{
-		X: int32(rand.Intn(1000) - 500),
-		Y: int32(rand.Intn(1000) - 500),
+		X: int32(rand.Intn(10000) - 5000),
+		Y: int32(rand.Intn(10000) - 5000),
 	}
 	snake := &Snake{
 		Entity: &Entity{
@@ -445,22 +459,23 @@ func NewSnake(id uint32, name string) *Snake {
 				X: 0,
 				Y: 100,
 			},
-			Size: 100,
+			Size: 600,
 			Name: name,
 		},
 		Segments: []*Entity{},
-		Speed:    2000,
+		Speed:    500,
 	}
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 100; i++ {
 		e := &Entity{
 			ID:          id + uint32(i+1),
 			EType:       ETypeSegment,
 			ContainerID: id,
 			Position: physics.Vect2{
 				X: pos.X,
-				Y: pos.Y - 25*int32(i+1),
+				Y: pos.Y - (snake.Size/2)*int32(i+1),
 			},
-			Size: 100,
+			Facing: snake.Facing,
+			Size:   600,
 		}
 		snake.Segments = append(snake.Segments, e)
 	}
