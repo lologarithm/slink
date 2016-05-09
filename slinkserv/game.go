@@ -116,7 +116,7 @@ func (gw *GameWorld) SnakesMsg() []*messages.Snake {
 
 func (gw *GameWorld) Tick() []Collision {
 	for _, snake := range gw.Snakes {
-		snakeDist := snake.Size / 2
+		snakeDist := snake.Size / 3
 		tickmv := (float64(snake.Speed) / gw.TicksPerSecond) / 100.0 // Dir vector normalizes to 100, so divide speed by 100
 		newpos := physics.Vect2{
 			X: snake.Position.X + int32(float64(snake.Facing.X)*tickmv),
@@ -206,7 +206,7 @@ func (g *GameSession) createHistoryPoint() {
 }
 
 func (g *GameSession) resetToHistory(u *User) uint32 {
-	lat := atomic.LoadInt64(&u.Client.latency)
+	lat := atomic.LoadInt64(&u.Client.latency) / 2
 	ticklag := uint32(float64(lat) / g.World.TickLength)
 	if ticklag > 50 {
 		ticklag = 50
@@ -315,12 +315,22 @@ func (g *GameSession) Run() {
 				return
 			}
 		}
+		st := time.Now()
 		collisions := g.World.Tick()
 		for range collisions {
 
 		}
 		if g.World.TickID%100 == 0 {
+			log.Printf("Tick Took: %dus", time.Now().Sub(st).Nanoseconds()/int64(time.Microsecond))
+			st = time.Now()
 			g.SendMasterFrame()
+			log.Printf("Send Took: %dus", time.Now().Sub(st).Nanoseconds()/int64(time.Microsecond))
+		}
+		if g.World.TickID%250 == 0 {
+			for _, u := range g.Clients {
+				snake := g.World.Snakes[u.SnakeID]
+				log.Printf("User: %s, Lat: %d", snake.Name, atomic.LoadInt64(&u.Client.latency))
+			}
 		}
 	}
 }
@@ -461,13 +471,13 @@ func NewSnake(id uint32, name string) *Snake {
 				X: 0,
 				Y: 100,
 			},
-			Size: 600,
+			Size: 300,
 			Name: name,
 		},
 		Segments: []*Entity{},
 		Speed:    2000,
 	}
-	for i := 0; i < 50; i++ {
+	for i := 0; i < 20; i++ {
 		e := &Entity{
 			ID:          id + uint32(i+1),
 			EType:       ETypeSegment,
@@ -477,7 +487,7 @@ func NewSnake(id uint32, name string) *Snake {
 				Y: pos.Y - (snake.Size/2)*int32(i+1),
 			},
 			Facing: snake.Facing,
-			Size:   600,
+			Size:   300,
 		}
 		snake.Segments = append(snake.Segments, e)
 	}

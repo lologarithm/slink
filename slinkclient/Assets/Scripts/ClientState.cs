@@ -404,7 +404,7 @@ public class PlayerSnake
 
     public void Move(int nticks, float tickPerSecond)
     {
-        int snakeDist = this.size / 2;
+        int snakeDist = this.size / 3;
         double spPerTick = ((float)this.speed) / tickPerSecond / 100.0;
         double dist = spPerTick * nticks;
         int totalX = (int)(((double)this.segments[0].Facing.X) * dist);
