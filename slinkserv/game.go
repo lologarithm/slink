@@ -118,7 +118,6 @@ func (gw *GameWorld) Tick() []Collision {
 	for _, snake := range gw.Snakes {
 		snakeDist := snake.Size / 2
 		tickmv := (float64(snake.Speed) / gw.TicksPerSecond) / 100.0 // Dir vector normalizes to 100, so divide speed by 100
-		prevface := snake.Facing
 		newpos := physics.Vect2{
 			X: snake.Position.X + int32(float64(snake.Facing.X)*tickmv),
 			Y: snake.Position.Y + int32(float64(snake.Facing.Y)*tickmv),
@@ -126,15 +125,18 @@ func (gw *GameWorld) Tick() []Collision {
 		snake.Position = newpos
 
 		for _, seg := range snake.Segments {
-			movevect := prevface
-			movevect = physics.NormalizeVect2(movevect, snakeDist)
-
-			newpos = physics.Vect2{
-				X: newpos.X - movevect.X,
-				Y: newpos.Y - movevect.Y,
+			movevect := physics.SubVect2(newpos, seg.Position)
+			mag := int32(movevect.Magnitude())
+			if mag > snakeDist {
+				movevect = physics.NormalizeVect2(movevect, mag-snakeDist)
+				newpos = physics.Vect2{
+					X: seg.Position.X + movevect.X,
+					Y: seg.Position.Y + movevect.Y,
+				}
+				seg.Position = newpos
 			}
-			seg.Position = newpos
-			seg.Facing, prevface = prevface, seg.Facing
+			seg.Facing = movevect
+			newpos = seg.Position
 		}
 	}
 
@@ -463,9 +465,9 @@ func NewSnake(id uint32, name string) *Snake {
 			Name: name,
 		},
 		Segments: []*Entity{},
-		Speed:    500,
+		Speed:    2000,
 	}
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 50; i++ {
 		e := &Entity{
 			ID:          id + uint32(i+1),
 			EType:       ETypeSegment,

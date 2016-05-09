@@ -7,6 +7,7 @@ using UnityEngine.UI;
 
 public class ClientState : MonoBehaviour
 {
+    public GameObject headPrefab;
 	public GameObject segmentPrefab;
     public GameObject segnamePrefab;
     public GameObject backgroundPrefab;
@@ -240,17 +241,20 @@ public class ClientState : MonoBehaviour
                 this.game.entities.Clear();
                 this.loadEntities(gmf.Entities, gmf.Snakes);
                 this.game.MasterTick = gmf.Tick;
-
-				// Now update local entities based on difference between master tick and now.
-                foreach (KeyValuePair<uint, PlayerSnake> entry in this.game.players)
+                int nticks = (int)(this.game.Tick - this.game.MasterTick);
+				
+                if (nticks <= 0)
                 {
-                    PlayerSnake snake = entry.Value;
-                    int nticks = (int)(this.game.Tick - this.game.MasterTick);
-                    snake.Move(nticks, this.game.TicksPerSecond);
+                    this.game.Tick = this.game.MasterTick;
+                    this.game.LastTickUpdated = this.game.Tick;
+                    break;
                 }
 
-                Debug.Log("masterframe for gameID:" + gmf.ID.ToString());
-                Debug.Log("Current tick: " + this.game.Tick + " Master Tick: " + gmf.Tick);
+                // Now update local entities based on difference between master tick and now.
+                foreach (KeyValuePair<uint, PlayerSnake> entry in this.game.players)
+                {
+                    entry.Value.Move(nticks, this.game.TicksPerSecond);
+                }
                 break;
 		}
 	}
@@ -282,7 +286,6 @@ public class ClientState : MonoBehaviour
         if (this.game.LastTickUpdated == this.game.Tick) {
             return false;
         }
-        Debug.Log("Processing tick: " + this.game.Tick);
 
         // Either a) create new snake at location or b) update existing snake based on speed.
         foreach(KeyValuePair<uint, PlayerSnake> entry in this.game.players) {
@@ -297,7 +300,7 @@ public class ClientState : MonoBehaviour
                 {
                     if (e.EType == 1) // Head
                     {
-                        GameObject newseg = (GameObject)Instantiate(this.segmentPrefab, new Vector3(e.X, e.Y, 0), Quaternion.identity);
+                        GameObject newseg = (GameObject)Instantiate(this.headPrefab, new Vector3(e.X, e.Y, 0), Quaternion.identity);
                         newseg.name = "head" + e.ID.ToString();
                         this.segments[e.ID] = newseg;
 
@@ -328,6 +331,12 @@ public class ClientState : MonoBehaviour
         float scale = (float)(e.Size) / (float)256.0; // Image is 256x256.
         segObj.transform.localScale = new Vector3(scale, scale, 1);
         segObj.transform.localPosition = new Vector3(e.X, e.Y, 0);
+        float angle = Vector3.Angle(new Vector3(0, 1, 0), new Vector3(e.Facing.X, e.Facing.Y, 0));
+        if (e.Facing.X > 0)
+        {
+            angle = -angle;
+        }
+        segObj.transform.rotation = Quaternion.AngleAxis(angle, new Vector3(0,0,1));
     }
 
     private int bkgsize = 10000;
@@ -395,38 +404,34 @@ public class PlayerSnake
 
     public void Move(int nticks, float tickPerSecond)
     {
-        var snakeDist = this.size / 2;
+        int snakeDist = this.size / 2;
         double spPerTick = ((float)this.speed) / tickPerSecond / 100.0;
         double dist = spPerTick * nticks;
         int totalX = (int)(((double)this.segments[0].Facing.X) * dist);
         int totalY = (int)(((double)this.segments[0].Facing.Y) * dist);
-        Debug.Log("TotalX: " + totalX + " TotalY: " + totalY);
         this.segments[0].X += totalX; 
         this.segments[0].Y += totalY;
 
-        var prevFace = new Vect2();
-        prevFace.X = this.segments[0].Facing.X;
-        prevFace.Y = this.segments[0].Facing.Y;
-
-        var prevSeg = 0;
+        Vector2 prevPos = new Vector2(this.segments[0].X, this.segments[0].Y);
         foreach (Entity seg in this.segments)
         {
             if (seg.ID == this.ID)
             {
                 continue;
             }
-            var movevect = new Vector2();
-            movevect.x = prevFace.X;
-            movevect.y = prevFace.Y;
-            movevect.Normalize();
-            movevect.Scale(new Vector2(snakeDist,snakeDist));
-
-            seg.X = this.segments[prevSeg].X - (int)movevect.x;
-            seg.Y = this.segments[prevSeg].Y - (int)movevect.y;
-            var tmpface = seg.Facing;
-            seg.Facing = prevFace;
-            prevFace = tmpface;
-            prevSeg++;
+            Vector2 curPos = new Vector2(seg.X, seg.Y);
+            Vector2 facing = prevPos - curPos;
+            int mag = (int)facing.magnitude;
+            if (mag > snakeDist)
+            {
+                var movevect = facing.normalized;
+                movevect = movevect * (mag-snakeDist);
+                seg.X += (int)movevect.x;
+                seg.Y += (int)movevect.y;
+            }
+            seg.Facing.X = (int)facing.x;
+            seg.Facing.Y = (int)facing.y;
+            prevPos = new Vector2(seg.X, seg.Y);
         }
     }
 }
