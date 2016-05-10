@@ -30,7 +30,7 @@ const (
 	GameMasterFrameMsgType
 	EntityMsgType
 	SnakeMsgType
-	SetDirectionMsgType
+	TurnSnakeMsgType
 	Vect2MsgType
 )
 
@@ -64,8 +64,8 @@ func ParseNetMessage(packet Packet, content []byte) Net {
 		msg = &Entity{}
 	case SnakeMsgType:
 		msg = &Snake{}
-	case SetDirectionMsgType:
-		msg = &SetDirection{}
+	case TurnSnakeMsgType:
+		msg = &TurnSnake{}
 	case Vect2MsgType:
 		msg = &Vect2{}
 	default:
@@ -466,6 +466,7 @@ type Snake struct {
 	Name string
 	Segments []uint32
 	Speed int32
+	Turning int16
 }
 
 func (m *Snake) Serialize(buffer *bytes.Buffer) {
@@ -477,6 +478,7 @@ func (m *Snake) Serialize(buffer *bytes.Buffer) {
 		binary.Write(buffer, binary.LittleEndian, v2)
 	}
 	binary.Write(buffer, binary.LittleEndian, m.Speed)
+	binary.Write(buffer, binary.LittleEndian, m.Turning)
 }
 
 func (m *Snake) Deserialize(buffer *bytes.Buffer) {
@@ -493,6 +495,7 @@ func (m *Snake) Deserialize(buffer *bytes.Buffer) {
 		binary.Read(buffer, binary.LittleEndian, &m.Segments[i])
 	}
 	binary.Read(buffer, binary.LittleEndian, &m.Speed)
+	binary.Read(buffer, binary.LittleEndian, &m.Turning)
 }
 
 func (m *Snake) Len() int {
@@ -506,32 +509,32 @@ func (m *Snake) Len() int {
 	}
 
 	mylen += 4
+	mylen += 2
 	return mylen
 }
 
-type SetDirection struct {
+type TurnSnake struct {
 	ID uint32
-	Facing *Vect2
+	Direction int16
 	TickID uint32
 }
 
-func (m *SetDirection) Serialize(buffer *bytes.Buffer) {
+func (m *TurnSnake) Serialize(buffer *bytes.Buffer) {
 	binary.Write(buffer, binary.LittleEndian, m.ID)
-	m.Facing.Serialize(buffer)
+	binary.Write(buffer, binary.LittleEndian, m.Direction)
 	binary.Write(buffer, binary.LittleEndian, m.TickID)
 }
 
-func (m *SetDirection) Deserialize(buffer *bytes.Buffer) {
+func (m *TurnSnake) Deserialize(buffer *bytes.Buffer) {
 	binary.Read(buffer, binary.LittleEndian, &m.ID)
-	m.Facing = new(Vect2)
-	m.Facing.Deserialize(buffer)
+	binary.Read(buffer, binary.LittleEndian, &m.Direction)
 	binary.Read(buffer, binary.LittleEndian, &m.TickID)
 }
 
-func (m *SetDirection) Len() int {
+func (m *TurnSnake) Len() int {
 	mylen := 0
 	mylen += 4
-	mylen += m.Facing.Len()
+	mylen += 2
 	mylen += 4
 	return mylen
 }

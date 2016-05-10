@@ -7,7 +7,7 @@ interface INet {
 	void Deserialize(BinaryReader buffer);
 }
 
-enum MsgType : ushort {Unknown=0,Ack=1,Multipart=2,Heartbeat=3,Connected=4,Disconnected=5,CreateAcct=6,CreateAcctResp=7,Login=8,LoginResp=9,JoinGame=10,GameConnected=11,GameMasterFrame=12,Entity=13,Snake=14,SetDirection=15,Vect2=16}
+enum MsgType : ushort {Unknown=0,Ack=1,Multipart=2,Heartbeat=3,Connected=4,Disconnected=5,CreateAcct=6,CreateAcctResp=7,Login=8,LoginResp=9,JoinGame=10,GameConnected=11,GameMasterFrame=12,Entity=13,Snake=14,TurnSnake=15,Vect2=16}
 
 static class Messages {
 // ParseNetMessage accepts input of raw bytes from a NetMessage. Parses and returns a Net message.
@@ -55,8 +55,8 @@ public static INet Parse(ushort msgType, byte[] content) {
 		case MsgType.Snake:
 			msg = new Snake();
 			break;
-		case MsgType.SetDirection:
-			msg = new SetDirection();
+		case MsgType.TurnSnake:
+			msg = new TurnSnake();
 			break;
 		case MsgType.Vect2:
 			msg = new Vect2();
@@ -332,6 +332,7 @@ public class Snake : INet {
 	public string Name;
 	public uint[] Segments;
 	public int Speed;
+	public short Turning;
 
 	public void Serialize(BinaryWriter buffer) {
 		buffer.Write(this.ID);
@@ -342,6 +343,7 @@ public class Snake : INet {
 			buffer.Write(this.Segments[v2]);
 		}
 		buffer.Write(this.Speed);
+		buffer.Write(this.Turning);
 	}
 
 	public void Deserialize(BinaryReader buffer) {
@@ -355,24 +357,24 @@ public class Snake : INet {
 			this.Segments[v2] = buffer.ReadUInt32();
 		}
 		this.Speed = buffer.ReadInt32();
+		this.Turning = buffer.ReadInt16();
 	}
 }
 
-public class SetDirection : INet {
+public class TurnSnake : INet {
 	public uint ID;
-	public Vect2 Facing;
+	public short Direction;
 	public uint TickID;
 
 	public void Serialize(BinaryWriter buffer) {
 		buffer.Write(this.ID);
-		this.Facing.Serialize(buffer);
+		buffer.Write(this.Direction);
 		buffer.Write(this.TickID);
 	}
 
 	public void Deserialize(BinaryReader buffer) {
 		this.ID = buffer.ReadUInt32();
-		this.Facing = new Vect2();
-		this.Facing.Deserialize(buffer);
+		this.Direction = buffer.ReadInt16();
 		this.TickID = buffer.ReadUInt32();
 	}
 }

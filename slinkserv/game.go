@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
-	"sync/atomic"
 	"time"
 
 	"github.com/lologarithm/slink/slinkserv/messages"
@@ -36,7 +35,8 @@ type GameSession struct {
 	Status GameStatus
 
 	// Private
-	World *GameWorld // Current world state
+	World     *GameWorld // Current world state
+	StartTime time.Time
 
 	// Historical state
 	prevWorlds     [50]*GameWorld // Last 1 second of game states
@@ -75,6 +75,7 @@ func NewWorld() *GameWorld {
 // Clone returns a deep copy of the game world at this time.
 func (gw *GameWorld) Clone() *GameWorld {
 	nw := NewWorld()
+	nw.TickID = gw.TickID
 	for k, e := range gw.Entities {
 		ne := &Entity{}
 		*ne = *e
@@ -85,7 +86,10 @@ func (gw *GameWorld) Clone() *GameWorld {
 	for k, s := range gw.Snakes {
 		ns := &Snake{}
 		*ns = *s
-		*ns.Entity = *s.Entity
+		ns.Entity = nw.Entities[k]
+		for idx := range ns.Segments {
+			ns.Segments[idx] = nw.Entities[ns.Segments[idx].ID]
+		}
 		nw.Snakes[k] = ns
 	}
 	return nw
@@ -116,6 +120,16 @@ func (gw *GameWorld) SnakesMsg() []*messages.Snake {
 
 func (gw *GameWorld) Tick() []Collision {
 	for _, snake := range gw.Snakes {
+		// Apply turning
+		if snake.Turning != 0 {
+			turn := -0.06
+			if snake.Turning == -1 {
+				turn = 0.06
+			}
+			snake.Facing = physics.NormalizeVect2(physics.RotateVect2(snake.Facing, turn), 100)
+		}
+
+		// Advance snake
 		snakeDist := snake.Size / 3
 		tickmv := (float64(snake.Speed) / gw.TicksPerSecond) / 100.0 // Dir vector normalizes to 100, so divide speed by 100
 		newpos := physics.Vect2{
@@ -147,16 +161,12 @@ func (gw *GameWorld) Tick() []Collision {
 
 	// If head touches body, head dies
 	// If head touches head, bigger head wins.
-
 	gw.TickID++
 	return nil
 }
 
-// func Bezier2(start physics.Vect2, control physics.Vect2, end physics.Vect2, t int32) physics.Vect2 {
-// 	return physics.AddVect2(physics.AddVect2(physics.MultVect2(start, ((1-t)*(1-t))), physics.MultVect2(control, 2 * t * (1 - t))), physics.MultVect2(end, (t * t));
-// }
-
 func (g *GameSession) replayHistory(ticks uint32) {
+	// log.Printf("Replaying %d ticks.", ticks)
 	for i := uint32(0); i < ticks; i++ {
 		// 1. Apply and commands from this tick
 		for _, msg := range g.commandHistory {
@@ -169,17 +179,18 @@ func (g *GameSession) replayHistory(ticks uint32) {
 		// 3.
 		g.createHistoryPoint()
 	}
+	// log.Printf("  Replayed back to tick: %d", g.World.TickID)
 }
 
 func (g *GameSession) applyCommand(msg GameMessage, echo bool) {
 	switch msg.mtype {
-	case messages.SetDirectionMsgType:
-		dirmsg := msg.net.(*messages.SetDirection)
-		g.setDirection(dirmsg.Facing, dirmsg.ID)
+	case messages.TurnSnakeMsgType:
+		dirmsg := msg.net.(*messages.TurnSnake)
+		g.setDirection(dirmsg.Direction, dirmsg.ID)
 		if echo {
 			frame := messages.Frame{
 				// Seq Doesn't matter because its set by server when its sent.
-				MsgType:       messages.SetDirectionMsgType,
+				MsgType:       messages.TurnSnakeMsgType,
 				ContentLength: uint16(dirmsg.Len()),
 			}
 			g.sendToAll(OutgoingMessage{
@@ -192,35 +203,45 @@ func (g *GameSession) applyCommand(msg GameMessage, echo bool) {
 	case messages.DisconnectedMsgType:
 		s := g.World.Snakes[msg.clientID]
 		g.removeSnake(s)
+	case messages.JoinGameMsgType:
+		g.addSnake(msg.clientID, msg.clientName)
 	default:
-		fmt.Printf("game.go:Run(): UNKNOWN MESSAGE TYPE: %T\n", msg)
+		fmt.Printf("game.go:Run(): UNKNOWN MESSAGE TYPE: %T\n", msg.net)
 	}
 }
 
 func (g *GameSession) createHistoryPoint() {
-	g.prevWorlds[g.prevHead] = g.World.Clone()
 	g.prevHead++
 	if g.prevHead == 50 {
 		g.prevHead = 0 // ring buffer!
 	}
+	g.prevWorlds[g.prevHead] = g.World.Clone()
 }
 
-func (g *GameSession) resetToHistory(u *User) uint32 {
-	lat := atomic.LoadInt64(&u.Client.latency) / 2
-	ticklag := uint32(float64(lat) / g.World.TickLength)
+func (g *GameSession) resetToHistory(tick uint32) uint32 {
+	// lat := atomic.LoadInt64(&u.Client.latency) / 2
+	// ticklag := uint32(float64(lat) / g.World.TickLength)
+	// log.Printf("Resetting from: %d to %d", g.World.TickID, tick)
+	if tick > g.World.TickID {
+
+	}
+	ticklag := g.World.TickID - tick
 	if ticklag > 50 {
 		ticklag = 50
+	} else if ticklag < 0 {
+		ticklag = 0
 	}
 	// Reset world back a bit.
 	if ticklag > 0 {
 		if g.World.TickID < ticklag {
 			ticklag = g.World.TickID
 		}
-		laghead := g.prevHead - ticklag
-		if laghead < 0 {
-			laghead += 50
+		prevWorldIdx := g.prevHead - ticklag
+		if ticklag > g.prevHead {
+			prevWorldIdx = 50 - (ticklag - g.prevHead)
 		}
-		g.World = g.prevWorlds[laghead].Clone()
+		g.World = g.prevWorlds[prevWorldIdx].Clone()
+		// log.Printf("World is now at tick: %d", g.World.TickID)
 	}
 	return ticklag
 }
@@ -232,6 +253,7 @@ type Collision struct {
 
 // Run starts the game!
 func (g *GameSession) Run() {
+	g.StartTime = time.Now()
 	waiting := true
 	waitms := int64(float64(time.Millisecond) * g.World.TickLength)
 	nextTick := time.Now().UTC().UnixNano() + waitms
@@ -266,31 +288,37 @@ func (g *GameSession) Run() {
 			case msg := <-g.FromNetwork:
 				msg.currentTick = g.World.TickID
 
-				// First check if this message is out of date!
-				isOld := false
-				for _, m := range g.commandHistory {
-					if m.clientID == msg.clientID && m.mtype == msg.mtype {
-						if m.currentTick >= msg.currentTick {
-							isOld = true
-							break
+				if setmsg, ok := msg.net.(*messages.TurnSnake); ok {
+					// First check if this message is out of date!
+					isOld := false
+					for _, m := range g.commandHistory {
+						if m.clientID == msg.clientID && m.mtype == msg.mtype {
+							if m.currentTick >= setmsg.TickID {
+								isOld = true
+								break
+							}
 						}
 					}
-				}
-				if isOld {
-					// Exit this msg processing now.
-					break
-				}
-				client := g.Clients[msg.clientID]
-				if client == nil {
-					break // Client is no longer connected.
-				}
-				ticklag := g.resetToHistory(client)
+					if isOld {
+						// Exit this msg processing now.
+						break
+					}
+					client := g.Clients[msg.clientID]
+					if client == nil {
+						break // Client is no longer connected.
+					}
 
-				// Apply the new message
-				g.applyCommand(msg, true)
+					if g.World.TickID >= setmsg.TickID {
+						ticklag := g.resetToHistory(setmsg.TickID)
+						g.applyCommand(msg, true)
+						// Now replay history!
+						g.replayHistory(ticklag)
+					}
+				} else {
+					// Apply the new message
+					g.applyCommand(msg, true)
+				}
 
-				// Now replay history!
-				g.replayHistory(ticklag)
 				g.commandHistory = append(g.commandHistory, msg)
 			case imsg := <-g.FromGameManager:
 				switch timsg := imsg.(type) {
@@ -302,6 +330,10 @@ func (g *GameSession) Run() {
 					delete(g.Clients, timsg.Client.ID)
 
 					snake := g.World.Snakes[user.SnakeID]
+					if snake == nil {
+						// wtf?
+						break
+					}
 					g.removeSnake(snake)
 					removecmd := GameMessage{
 						clientID:    snake.ID,
@@ -315,21 +347,18 @@ func (g *GameSession) Run() {
 				return
 			}
 		}
-		st := time.Now()
-		collisions := g.World.Tick()
-		for range collisions {
+		expectedTick := (time.Now().UnixNano() - g.StartTime.UnixNano()) / int64(g.World.TickLength*float64(time.Millisecond))
+		for g.World.TickID < uint32(expectedTick) {
+			st := time.Now()
+			collisions := g.World.Tick()
+			for range collisions {
 
-		}
-		if g.World.TickID%100 == 0 {
-			log.Printf("Tick Took: %dus", time.Now().Sub(st).Nanoseconds()/int64(time.Microsecond))
-			st = time.Now()
-			g.SendMasterFrame()
-			log.Printf("Send Took: %dus", time.Now().Sub(st).Nanoseconds()/int64(time.Microsecond))
-		}
-		if g.World.TickID%250 == 0 {
-			for _, u := range g.Clients {
-				snake := g.World.Snakes[u.SnakeID]
-				log.Printf("User: %s, Lat: %d", snake.Name, atomic.LoadInt64(&u.Client.latency))
+			}
+			if g.World.TickID%100 == 0 {
+				log.Printf("Tick Took: %dus", time.Now().Sub(st).Nanoseconds()/int64(time.Microsecond))
+				st = time.Now()
+				g.SendMasterFrame()
+				log.Printf("Send Took: %dus", time.Now().Sub(st).Nanoseconds()/int64(time.Microsecond))
 			}
 		}
 	}
@@ -354,15 +383,8 @@ func (g *GameSession) removeSnake(snake *Snake) {
 // addPlayer will create a snake, add it to the game, and return the successful connection message to the player.
 func (g *GameSession) addPlayer(ap AddPlayer) {
 	newid := uint32(len(g.World.Entities))
-	g.World.Snakes[newid] = NewSnake(newid, ap.Entity.Name)
-	g.World.Entities[newid] = g.World.Snakes[newid].Entity
-	g.World.Tree.Add(g.World.Snakes[newid].Entity)
-
-	for _, s := range g.World.Snakes[newid].Segments {
-		g.World.Entities[s.ID] = s
-		g.World.Tree.Add(s)
-	}
-
+	log.Printf("Adding new player to game %d: %s", g.ID, ap.Entity.Name)
+	g.addSnake(newid, ap.Entity.Name)
 	g.Clients[ap.Client.ID] = &User{
 		Account: nil,
 		SnakeID: newid,
@@ -380,13 +402,37 @@ func (g *GameSession) addPlayer(ap AddPlayer) {
 
 	outgoing := NewOutgoingMsg(ap.Client, messages.GameConnectedMsgType, cgr)
 	ap.Client.ToNetwork <- outgoing
+
+	addcmd := GameMessage{
+		clientID:    newid,
+		clientName:  ap.Entity.Name,
+		mtype:       messages.JoinGameMsgType,
+		currentTick: g.World.TickID,
+	}
+	g.commandHistory = append(g.commandHistory, addcmd)
+
 }
 
-func (g *GameSession) setDirection(facing *messages.Vect2, snakeID uint32) {
-	// TODO: Allow a maximum turn rate so it can't just snap any direction
+func (g *GameSession) addSnake(newid uint32, name string) {
+	if g.World.Snakes[newid] != nil {
+		return
+	}
+	g.World.Snakes[newid] = NewSnake(newid, name)
+	g.World.Entities[newid] = g.World.Snakes[newid].Entity
+	g.World.Tree.Add(g.World.Snakes[newid].Entity)
+
+	for _, s := range g.World.Snakes[newid].Segments {
+		g.World.Entities[s.ID] = s
+		g.World.Tree.Add(s)
+	}
+}
+
+func (g *GameSession) setDirection(facing int16, snakeID uint32) {
 	snake := g.World.Snakes[snakeID]
-	snake.Facing = physics.Vect2{X: facing.X, Y: facing.Y}
-	snake.Facing = physics.NormalizeVect2(snake.Facing, 100)
+	if snake == nil {
+		return
+	}
+	g.World.Snakes[snakeID].Turning = facing
 }
 
 func (g *GameSession) sendToAll(msg OutgoingMessage) {
@@ -403,6 +449,14 @@ func (g *GameSession) SendMasterFrame() {
 		Entities: g.World.EntitiesMsg(),
 		Snakes:   g.World.SnakesMsg(),
 		Tick:     g.World.TickID,
+	}
+
+	for _, ent := range mf.Entities {
+		for _, s := range mf.Snakes {
+			if ent.ID == s.ID {
+				log.Printf("  Master snake: %d, facing: %d,%d", s.ID, ent.Facing.X, ent.Facing.Y)
+			}
+		}
 	}
 
 	frame := messages.Frame{
@@ -441,6 +495,7 @@ type Snake struct {
 	*Entity            // Snake entity itself is the head.
 	Segments []*Entity // Segments are the body!
 	Speed    int32     // Velocity!
+	Turning  int16     // -1 Left, 0 straight, 1 = right
 }
 
 func (s *Snake) toSnakeMsg() *messages.Snake {
@@ -453,6 +508,7 @@ func (s *Snake) toSnakeMsg() *messages.Snake {
 		Segments: segIDs,
 		Speed:    s.Speed,
 		Name:     s.Name,
+		Turning:  s.Turning,
 	}
 }
 
@@ -559,7 +615,9 @@ type GameMessage struct {
 	client      *Client
 	mtype       messages.MessageType
 	currentTick uint32 // Tick when the game processed this mesage.
-	clientID    uint32 // ID of client. Cached so you can clear client.
+
+	clientID   uint32 // ID of client. Cached so you can clear client.
+	clientName string // Name of client so you can clear client.
 }
 
 // InternalMessage is for messages between internal components (gamesession and gamemanager) that never leaves the server.

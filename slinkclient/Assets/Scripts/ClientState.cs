@@ -12,8 +12,6 @@ public class ClientState : MonoBehaviour
     public GameObject segnamePrefab;
     public GameObject backgroundPrefab;
 
-	public string serverAddress;
-	public int serverPort;
 	public GameObject latencyTextContainer;
     public Camera mainCam;
 
@@ -43,7 +41,12 @@ public class ClientState : MonoBehaviour
 
         // TODO: allow handoff of network messenger from another scene?
         // Or do we pass the entire client state manager from scene to scene?
-		net = new NetworkMessenger(this.message_queue, serverAddress, serverPort);
+        string addr = PlayerPrefs.GetString("ip");
+        if (addr == "" || addr == null) {
+            addr = "127.0.0.1";
+        }
+        int serverPort = 24816;
+		net = new NetworkMessenger(this.message_queue, addr, serverPort);
         string name = PlayerPrefs.GetString("name");
         if (name == "" || name == null)
         {
@@ -69,50 +72,21 @@ public class ClientState : MonoBehaviour
 		}
         if (this.updateGame()) // Only allow dir changes on ticks.
         {
-            Vector2 myfacing = new Vector2(this.game.entities[this.mySnake].Facing.X, this.game.entities[this.mySnake].Facing.Y);
-
+            short currentTurn = this.game.players[this.mySnake].turning;
+            short newTurn = 0;
             if (Input.GetKey(KeyCode.A) || Input.GetKey(KeyCode.LeftArrow))
             {
-                myfacing = this.RotateVect2(myfacing, 0.03f);
+                newTurn--;
             }
             if (Input.GetKey(KeyCode.D) || Input.GetKey(KeyCode.RightArrow))
             {
-                myfacing = this.RotateVect2(myfacing, -0.03f);
+                newTurn++;
             }
 
-            if (myfacing.x != this.game.entities[this.mySnake].Facing.X && myfacing.y != this.game.entities[this.mySnake].Facing.Y)
-            {
-                myfacing.Normalize();
-                myfacing.Scale(new Vector2(100,100));
-
-                this.game.entities[this.mySnake].Facing.X = (int)myfacing.x;
-                this.game.entities[this.mySnake].Facing.Y = (int)myfacing.y;
-                this.SetDirection(myfacing);
-            }
-
-            //            int centerX = Screen.width / 2;
-//            int centerY = Screen.height / 2;
-//            Vector2 move = new Vector2(Input.mousePosition.x - centerX, Input.mousePosition.y - centerY);
-//            move.Normalize();
-//            move.Scale(new Vector2(100,100));
-//
-//            Vect2 myfacing = this.game.entities[this.mySnake].Facing;
-//
-//            if (myfacing.X != (int)move.x || myfacing.Y != (int)move.y) {
-//                myfacing.X = (int)move.x;
-//                myfacing.Y = (int)move.y;
-//                this.SetDirection(move);
-//            }
+            this.game.players[this.mySnake].turning = newTurn;
+            this.SetDirection(newTurn);
         }
 	}
-
-    Vector2 RotateVect2(Vector2 v, float degrees)
-    {
-        Vector2 result = new Vector2();
-        result.x = v.x * (float)Math.Cos(degrees) - v.y * (float)Math.Sin(degrees);
-        result.y = v.x * (float)Math.Sin(degrees) + v.y * (float)Math.Cos(degrees);
-        return result;
-    }
 
 	void OnApplicationQuit()
 	{
@@ -148,15 +122,12 @@ public class ClientState : MonoBehaviour
 		this.net.sendNetPacket(MsgType.Login, login_msg);
 	}
 
-    public void SetDirection(Vector2 dir) {
-        SetDirection dir_msg = new SetDirection();
+    public void SetDirection(short turn) {
+        TurnSnake dir_msg = new TurnSnake();
         dir_msg.ID = this.mySnake;
-        dir_msg.TickID = this.game.Tick;
-        dir_msg.Facing = new Vect2();
-        dir_msg.Facing.X = (int)(dir.x);
-        dir_msg.Facing.Y = (int)dir.y;
-        
-        this.net.sendNetPacket(MsgType.SetDirection, dir_msg);
+        dir_msg.TickID = this.game.Tick-1;
+        dir_msg.Direction = turn;
+        this.net.sendNetPacket(MsgType.TurnSnake, dir_msg);
     }
 
 
@@ -226,6 +197,10 @@ public class ClientState : MonoBehaviour
 				CreateAcctResp car = ((CreateAcctResp)parsedMsg);
 				this.accountID = car.AccountID;
 				break;
+            case MsgType.TurnSnake:
+                TurnSnake sd = ((TurnSnake)parsedMsg);
+                this.game.players[sd.ID].turning = sd.Direction;
+                break;
             case MsgType.GameConnected:
                 GameConnected gc = ((GameConnected)parsedMsg);
                 this.game = new GameInstance();
@@ -238,7 +213,7 @@ public class ClientState : MonoBehaviour
 				break;
             case MsgType.GameMasterFrame:
                 GameMasterFrame gmf = ((GameMasterFrame)parsedMsg);
-                this.game.entities.Clear();
+//                this.game.entities.Clear();
                 this.loadEntities(gmf.Entities, gmf.Snakes);
                 this.game.MasterTick = gmf.Tick;
                 int nticks = (int)(this.game.Tick - this.game.MasterTick);
@@ -272,6 +247,9 @@ public class ClientState : MonoBehaviour
             ps.size = this.game.entities[s.Segments[0]].Size;
             ps.segments = new Entity[s.Segments.Length+1];
             ps.segments[0] = head;
+            if (s.ID != this.mySnake) {
+                ps.turning = s.Turning;
+            }
             for (int j = 0; j < s.Segments.Length; j++)
             {
                 ps.segments[j+1] = this.game.entities[s.Segments[j]];
@@ -343,7 +321,11 @@ public class ClientState : MonoBehaviour
 
     private void updateCamera() 
     {
+        if (!this.game.entities.ContainsKey(this.mySnake)) {
+            return;
+        }
         Entity mysnake = this.game.entities[this.mySnake];
+        
         this.mainCam.transform.position = new Vector3(mysnake.X, mysnake.Y, -100);
 
         float screenAspect = (float)Screen.width / (float)Screen.height;
@@ -401,11 +383,24 @@ public class PlayerSnake
     public int speed;
     public int size;
 	public Entity[] segments;
+    public short turning = 0;
 
     public void Move(int nticks, float tickPerSecond)
     {
+        if (this.turning != 0) {
+            float turn = -0.06f;
+			if (this.turning == -1) {
+				turn = 0.06f;
+			}
+			var newface = this.RotateVect2(new Vector2(this.segments[0].Facing.X, this.segments[0].Facing.Y), turn); //physics.NormalizeVect2(physics.RotateVect2(snake.Facing, turn), 100)
+            newface.Normalize();
+            newface *= 100;
+            this.segments[0].Facing.X = (int)newface.x;
+            this.segments[0].Facing.Y = (int)newface.y;
+        }
+        
         int snakeDist = this.size / 3;
-        double spPerTick = ((float)this.speed) / tickPerSecond / 100.0;
+        double spPerTick = (((float)this.speed) / tickPerSecond) / 100.0;
         double dist = spPerTick * nticks;
         int totalX = (int)(((double)this.segments[0].Facing.X) * dist);
         int totalY = (int)(((double)this.segments[0].Facing.Y) * dist);
@@ -434,4 +429,13 @@ public class PlayerSnake
             prevPos = new Vector2(seg.X, seg.Y);
         }
     }
+    
+    Vector2 RotateVect2(Vector2 v, float degrees)
+    {
+        Vector2 result = new Vector2();
+        result.x = v.x * (float)Math.Cos(degrees) - v.y * (float)Math.Sin(degrees);
+        result.y = v.x * (float)Math.Sin(degrees) + v.y * (float)Math.Cos(degrees);
+        return result;
+    }
+
 }

@@ -71,11 +71,12 @@ class Snake {
  Name string
  Segments []uint32
  Speed int32
+ Turning int16
 }
 
-class SetDirection {
+class TurnSnake {
  ID uint32
- Facing *Vect2
+ Direction int16
  TickID uint32
 }
 
