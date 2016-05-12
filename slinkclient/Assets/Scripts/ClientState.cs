@@ -44,6 +44,7 @@ public class ClientState : MonoBehaviour
             addr = "127.0.0.1";
         }
         int serverPort = 24816;
+        Debug.Log("Connecting to " + addr + ":" + serverPort);
 		net = new NetworkMessenger(this.message_queue, addr, serverPort);
         string name = PlayerPrefs.GetString("name");
         if (name == "" || name == null)
@@ -358,6 +359,8 @@ public class ClientState : MonoBehaviour
                 }
             }
         }
+
+        this.mainCam.orthographicSize = mysnake.Size * 10;
     }
 }
 
