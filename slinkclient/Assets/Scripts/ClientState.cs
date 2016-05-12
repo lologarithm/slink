@@ -328,6 +328,9 @@ public class ClientState : MonoBehaviour
         segObj.transform.rotation = Quaternion.AngleAxis(angle, new Vector3(0,0,1));
     }
 
+    static float PLANE_DEFAULT_SIZE = 10;
+    static float TEXTURE_SIZE = 2048;
+
     private void updateCamera() 
     {
         Entity mysnake = this.game.entities[this.mySnake];
@@ -339,10 +342,16 @@ public class ClientState : MonoBehaviour
         float cameraHeight = this.mainCam.orthographicSize * 2;
         float cameraWidth = cameraHeight * screenAspect;
 
-        float yOffset = mysnake.X / cameraWidth;
-        float xOffset = mysnake.Y / cameraHeight;
+        float yOffset = mysnake.X / 11000f;
+        float xOffset = mysnake.Y / 11000f;
+        float xScale = cameraHeight / PLANE_DEFAULT_SIZE;
+        float yScale = cameraWidth / PLANE_DEFAULT_SIZE;
+        Material backMat = background.GetComponent<Renderer>().material;
+        background.transform.localScale = new Vector3(xScale, 1, yScale);
+        backMat.mainTextureScale = new Vector2(cameraHeight / TEXTURE_SIZE / 4f, cameraWidth / TEXTURE_SIZE / 4f);
+        backMat.SetTextureOffset("_MainTex", new Vector2(xOffset, yOffset * -1));
 
-        background.GetComponent<Renderer>().material.SetTextureOffset("_MainTex", new Vector2(xOffset, yOffset * -1));
+        Debug.Log((cameraHeight / TEXTURE_SIZE / 10f) + " " + (cameraWidth / TEXTURE_SIZE / 10f));
     }
 }
 
