@@ -8,7 +8,7 @@ public class ClientState : MonoBehaviour
     public GameObject headPrefab;
 	public GameObject segmentPrefab;
     public GameObject segnamePrefab;
-    public GameObject backgroundPrefab;
+    public GameObject background;
 
 	public GameObject latencyTextContainer;
     public Camera mainCam;
@@ -28,7 +28,6 @@ public class ClientState : MonoBehaviour
 
 	// Unity objects state
 	private Dictionary<uint, GameObject> segments = new Dictionary<uint, GameObject> ();
-    private Dictionary<Vector2, GameObject> backgrounds = new Dictionary<Vector2, GameObject>();
 	private Text latencyText;
 
     // Unity lifecycle methods
@@ -327,37 +326,21 @@ public class ClientState : MonoBehaviour
         segObj.transform.rotation = Quaternion.AngleAxis(angle, new Vector3(0,0,1));
     }
 
-    private int bkgsize = 10000;
-
     private void updateCamera() 
     {
         Entity mysnake = this.game.entities[this.mySnake];
         
         this.mainCam.transform.position = new Vector3(mysnake.X, mysnake.Y, -100);
+        this.mainCam.orthographicSize = mysnake.Size * 10;
 
         float screenAspect = (float)Screen.width / (float)Screen.height;
         float cameraHeight = this.mainCam.orthographicSize * 2;
         float cameraWidth = cameraHeight * screenAspect;
 
-        var horzBacks = ((int)cameraWidth) / bkgsize + 1;
-        var vertBacks = ((int)cameraHeight) / bkgsize + 1;
+        float yOffset = mysnake.X / cameraWidth;
+        float xOffset = mysnake.Y / cameraHeight;
 
-        int xstart = mysnake.X / bkgsize;
-        int ystart = mysnake.Y / bkgsize;
-
-        for (int x = xstart-(horzBacks/2)-1; x <= (xstart+horzBacks/2)+1; x++)
-        {
-            for (int y = ystart-(vertBacks/2)-1; y <= ystart+(vertBacks/2)+1; y++)
-            {
-                var key = new Vector2(x, y);
-                if (!backgrounds.ContainsKey(key)) {
-                    GameObject back = (GameObject)Instantiate(this.backgroundPrefab, new Vector3(x*bkgsize, y*bkgsize, 1), Quaternion.identity);
-                    backgrounds.Add(key, back);
-                }
-            }
-        }
-
-        this.mainCam.orthographicSize = mysnake.Size * 10;
+        background.GetComponent<Renderer>().material.SetTextureOffset("_MainTex", new Vector2(xOffset, yOffset * -1));
     }
 }
 
