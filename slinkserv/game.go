@@ -185,7 +185,7 @@ func (g *GameSession) Run() {
 						setmsg.ID = client.SnakeID
 
 						if g.World.TickID >= setmsg.TickID {
-							g.resetToHistory(setmsg.TickID)
+							g.resetToHistory(setmsg.TickID - 1)
 						}
 
 						frame := messages.Frame{

@@ -1,6 +1,8 @@
 package slinkserv
 
 import (
+	"fmt"
+
 	"github.com/lologarithm/slink/slinkserv/messages"
 	"github.com/lologarithm/survival/physics"
 	"github.com/lologarithm/survival/physics/quadtree"
@@ -93,6 +95,7 @@ func (gw *GameWorld) Tick() []Collision {
 				turn = 0.06
 			}
 			snake.Facing = physics.NormalizeVect2(physics.RotateVect2(snake.Facing, turn), 100)
+			fmt.Printf("Snake %d, Tick %d, Facing: %v\n", snake.ID, gw.TickID, snake.Facing)
 		}
 
 		// Advance snake

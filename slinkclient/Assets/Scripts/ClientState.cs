@@ -122,6 +122,7 @@ public class ClientState : MonoBehaviour
 	}
 
     public void SetDirection(short turn) {
+        Debug.Log("Sending facing at tick " + this.game.Tick + ", " + turn);
         TurnSnake dir_msg = new TurnSnake();
         dir_msg.ID = this.mySnake;
         dir_msg.TickID = this.game.Tick;
@@ -231,7 +232,7 @@ public class ClientState : MonoBehaviour
                 // Now update local entities based on difference between master tick and now.
                 foreach (KeyValuePair<uint, PlayerSnake> entry in this.game.players)
                 {
-                    entry.Value.Move(nticks, this.game.TicksPerSecond);
+                    entry.Value.Move(nticks, this.game.TicksPerSecond, this.game.Tick);
                 }
                 break;
 		}
@@ -271,7 +272,7 @@ public class ClientState : MonoBehaviour
             PlayerSnake snake = entry.Value;
 
             int nticks = (int)(this.game.Tick - this.game.LastTickUpdated);
-            snake.Move(nticks, this.game.TicksPerSecond);
+            snake.Move(nticks, this.game.TicksPerSecond, this.game.Tick);
 
             foreach (Entity e in snake.segments)
             {
@@ -296,6 +297,7 @@ public class ClientState : MonoBehaviour
                         tm.text = snake.name;
                         segname.transform.parent = newseg.transform;
                         segname.transform.localPosition = new Vector3(0, 0, -1);
+                        segname.transform.rotation = Quaternion.AngleAxis(0, new Vector3(0, 0, 1));
                     }
                     else if (e.EType == 2) // Body segment
                     {
@@ -376,18 +378,20 @@ public class PlayerSnake
 	public Entity[] segments;
     public short turning = 0;
 
-    public void Move(int nticks, float tickPerSecond)
+    public void Move(int nticks, float tickPerSecond, uint currentTick)
     {
         if (this.turning != 0) {
             float turn = -0.06f;
 			if (this.turning == -1) {
 				turn = 0.06f;
 			}
+            turn *= nticks;
 			var newface = this.RotateVect2(new Vector2(this.segments[0].Facing.X, this.segments[0].Facing.Y), turn); //physics.NormalizeVect2(physics.RotateVect2(snake.Facing, turn), 100)
             newface.Normalize();
             newface *= 100;
             this.segments[0].Facing.X = (int)newface.x;
             this.segments[0].Facing.Y = (int)newface.y;
+            Debug.Log("Tick: " + (currentTick) + "->" + (currentTick+ nticks) + " Facing: " + this.segments[0].Facing.X + "," + this.segments[0].Facing.Y);
         }
         
         int snakeDist = this.size / 3;
