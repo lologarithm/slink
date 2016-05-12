@@ -116,9 +116,7 @@ func TestMultipartMessage(t *testing.T) {
 	}
 	time.Sleep(time.Millisecond * 100)
 
-	packet = messages.NewPacket(messages.CreateGameMsgType, &messages.CreateGame{
-		Name: "testgame",
-	})
+	packet = messages.NewPacket(messages.JoinGameMsgType, &messages.JoinGame{})
 	msgbytes = packet.Pack()
 	_, err = clientconn.Write(msgbytes)
 	if err != nil {

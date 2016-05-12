@@ -1,7 +1,5 @@
 using UnityEngine;
 using System;
-using System.IO;
-using System.Net;
 using System.Collections.Generic;
 using UnityEngine.UI;
 
@@ -53,7 +51,6 @@ public class ClientState : MonoBehaviour
             name = "Random Name lol";
         }
         this.CreateAccount(name, name);
-		this.JoinGame();
 	}
         
 	// Update is called once per frame?
@@ -82,9 +79,11 @@ public class ClientState : MonoBehaviour
             {
                 newTurn++;
             }
-
-            this.game.players[this.mySnake].turning = newTurn;
-            this.SetDirection(newTurn);
+            
+            if (currentTurn != newTurn) {
+                this.game.players[this.mySnake].turning = newTurn;
+                this.SetDirection(newTurn);
+            }
         }
 	}
 
@@ -125,7 +124,7 @@ public class ClientState : MonoBehaviour
     public void SetDirection(short turn) {
         TurnSnake dir_msg = new TurnSnake();
         dir_msg.ID = this.mySnake;
-        dir_msg.TickID = this.game.Tick-1;
+        dir_msg.TickID = this.game.Tick;
         dir_msg.Direction = turn;
         this.net.sendNetPacket(MsgType.TurnSnake, dir_msg);
     }
@@ -196,10 +195,13 @@ public class ClientState : MonoBehaviour
 			case MsgType.CreateAcctResp:
 				CreateAcctResp car = ((CreateAcctResp)parsedMsg);
 				this.accountID = car.AccountID;
+                this.JoinGame();
 				break;
             case MsgType.TurnSnake:
                 TurnSnake sd = ((TurnSnake)parsedMsg);
-                this.game.players[sd.ID].turning = sd.Direction;
+                if (this.game.players.ContainsKey(sd.ID) ) {
+                    this.game.players[sd.ID].turning = sd.Direction;    
+                }
                 break;
             case MsgType.GameConnected:
                 GameConnected gc = ((GameConnected)parsedMsg);
@@ -213,7 +215,8 @@ public class ClientState : MonoBehaviour
 				break;
             case MsgType.GameMasterFrame:
                 GameMasterFrame gmf = ((GameMasterFrame)parsedMsg);
-//                this.game.entities.Clear();
+                this.game.entities.Clear();
+                this.game.players.Clear();
                 this.loadEntities(gmf.Entities, gmf.Snakes);
                 this.game.MasterTick = gmf.Tick;
                 int nticks = (int)(this.game.Tick - this.game.MasterTick);
@@ -247,9 +250,7 @@ public class ClientState : MonoBehaviour
             ps.size = this.game.entities[s.Segments[0]].Size;
             ps.segments = new Entity[s.Segments.Length+1];
             ps.segments[0] = head;
-            if (s.ID != this.mySnake) {
-                ps.turning = s.Turning;
-            }
+            ps.turning = s.Turning;
             for (int j = 0; j < s.Segments.Length; j++)
             {
                 ps.segments[j+1] = this.game.entities[s.Segments[j]];
@@ -261,7 +262,7 @@ public class ClientState : MonoBehaviour
     private bool updateGame() {
         this.game.UpdateTick();
 
-        if (this.game.LastTickUpdated == this.game.Tick) {
+        if (this.game.LastTickUpdated >= this.game.Tick) {
             return false;
         }
 
@@ -272,8 +273,19 @@ public class ClientState : MonoBehaviour
             int nticks = (int)(this.game.Tick - this.game.LastTickUpdated);
             snake.Move(nticks, this.game.TicksPerSecond);
 
+            // int minx = mysnake.X-int(cameraWidth/2);
+            // int maxx = mysnake.X+int(cameraWidth/2);
+            // int miny = camer
             foreach (Entity e in snake.segments)
             {
+                var vpp = this.mainCam.WorldToViewportPoint(new Vector3(e.X, e.Y, 0));
+                if (vpp.x > 1.0 || vpp.x < 0.0 || vpp.y < 0.0 || vpp.y > 1.0) {
+                    if (this.segments.ContainsKey(e.ID)) {
+                        Destroy(this.segments[e.ID]);
+                        this.segments.Remove(e.ID);
+                    }
+                    continue;
+                }
                 if (!this.segments.ContainsKey(e.ID))
                 {
                     if (e.EType == 1) // Head
@@ -321,9 +333,6 @@ public class ClientState : MonoBehaviour
 
     private void updateCamera() 
     {
-        if (!this.game.entities.ContainsKey(this.mySnake)) {
-            return;
-        }
         Entity mysnake = this.game.entities[this.mySnake];
         
         this.mainCam.transform.position = new Vector3(mysnake.X, mysnake.Y, -100);
@@ -337,7 +346,6 @@ public class ClientState : MonoBehaviour
 
         int xstart = mysnake.X / bkgsize;
         int ystart = mysnake.Y / bkgsize;
-
 
         for (int x = xstart-(horzBacks/2)-1; x <= (xstart+horzBacks/2)+1; x++)
         {

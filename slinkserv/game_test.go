@@ -5,17 +5,25 @@ import (
 	"testing"
 )
 
-func TestGameSpawning(t *testing.T) {
-	g := NewGame("A", nil, nil, nil)
-	g.Seed = 10
+func TestTick(t *testing.T) {
+	tgm := make(chan GameMessage, 100)
+	ton := make(chan OutgoingMessage, 100)
 
-	g.SpawnChunk(0, 0)
+	g := NewGame(tgm, ton)
+	g.addSnake(1, "test")
+	g.setDirection(1, 1)
 
-	for i, t := range g.World.Entities {
-		name := "Rock"
-		if t.EType == 2 {
-			name = "Tree"
-		}
-		fmt.Printf("Entity %s %3d: Size: %2d X:%3d Y:%3d\n", name, i, t.Body.Height, t.Body.Position.X, t.Body.Position.Y)
+	for i := 0; i < 10; i++ {
+		g.World.Tick()
+	}
+
+	g.setDirection(0, 1)
+
+	for i := 0; i < 50; i++ {
+		g.World.Tick()
+	}
+	entmsg := g.World.EntitiesMsg()
+	for _, ent := range entmsg {
+		fmt.Printf("  Ent %d @ (%v,%v)\n", ent.ID, ent.X, ent.Y)
 	}
 }
