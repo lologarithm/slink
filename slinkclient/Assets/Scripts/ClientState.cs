@@ -274,9 +274,6 @@ public class ClientState : MonoBehaviour
             int nticks = (int)(this.game.Tick - this.game.LastTickUpdated);
             snake.Move(nticks, this.game.TicksPerSecond);
 
-            // int minx = mysnake.X-int(cameraWidth/2);
-            // int maxx = mysnake.X+int(cameraWidth/2);
-            // int miny = camer
             foreach (Entity e in snake.segments)
             {
                 var vpp = this.mainCam.WorldToViewportPoint(new Vector3(e.X, e.Y, 0));

@@ -82,7 +82,7 @@ func (client *Client) ProcessBytes(disconClient chan Client) {
 
 				// If after 5 seconds we haven't gotten any messages, shut er down!
 				lastMsg := time.Unix(atomic.LoadInt64(&client.lastMsg), 0)
-				if time.Now().UTC().Sub(lastMsg).Seconds() > 65 {
+				if time.Now().UTC().Sub(lastMsg).Seconds() > 5 {
 					client.Alive = false
 					log.Printf("Client %d: no message in past %.1f seconds. Closing down.", client.ID, time.Now().UTC().Sub(lastMsg).Seconds())
 					return
