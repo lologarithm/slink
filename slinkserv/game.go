@@ -160,24 +160,24 @@ func (g *GameSession) Run() {
 				select {
 				case msg := <-g.FromNetwork:
 					msg.currentTick = g.World.TickID
-
 					if setmsg, ok := msg.net.(*messages.TurnSnake); ok {
 						// st := time.Now()
-						log.Printf(" Client %d, setting direction: %v @ tick: %d", msg.clientID, setmsg.Direction, setmsg.TickID)
+						// log.Printf(" Client %d, setting direction: %v @ tick: %d (now: %d)", msg.clientID, setmsg.Direction, setmsg.TickID, g.World.TickID)
 						// First check if this message is out of date!
-						isOld := false
-						for _, m := range g.commandHistory {
-							if m.clientID == msg.clientID && m.mtype == msg.mtype {
-								if m.currentTick >= setmsg.TickID {
-									isOld = true
-									break
-								}
-							}
-						}
-						if isOld {
-							// Exit this msg processing now.
-							break
-						}
+						// isOld := false
+						// for _, m := range g.commandHistory {
+						// 	if m.clientID == msg.clientID && m.mtype == msg.mtype {
+						// 		if m.currentTick >= setmsg.TickID {
+						// 			isOld = true
+						// 			break
+						// 		}
+						// 	}
+						// }
+						// if isOld {
+						// 	// Exit this msg processing now.
+						// 	break
+						// }
+						msg.currentTick = setmsg.TickID
 						client := g.Clients[msg.clientID]
 						if client == nil {
 							break // Client is no longer connected.

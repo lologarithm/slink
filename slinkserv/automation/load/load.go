@@ -11,7 +11,7 @@ import (
 	"github.com/lologarithm/slink/slinkserv/automation"
 )
 
-var numClient = 50
+var numClient = 5
 
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())

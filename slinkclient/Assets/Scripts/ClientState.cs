@@ -122,10 +122,10 @@ public class ClientState : MonoBehaviour
 	}
 
     public void SetDirection(short turn) {
-        Debug.Log("Sending facing at tick " + this.game.Tick + ", " + turn);
+        //Debug.Log("Sending facing at tick " + this.game.Tick + ", " + turn);
         TurnSnake dir_msg = new TurnSnake();
         dir_msg.ID = this.mySnake;
-        dir_msg.TickID = this.game.Tick;
+        dir_msg.TickID = this.game.Tick+1;
         dir_msg.Direction = turn;
         this.net.sendNetPacket(MsgType.TurnSnake, dir_msg);
     }
@@ -395,12 +395,11 @@ public class PlayerSnake
 				turn = 0.06f;
 			}
             turn *= nticks;
-			var newface = this.RotateVect2(new Vector2(this.segments[0].Facing.X, this.segments[0].Facing.Y), turn); //physics.NormalizeVect2(physics.RotateVect2(snake.Facing, turn), 100)
-            newface.Normalize();
-            newface *= 100;
+			var newface = this.RotateVect2(new Vector2(this.segments[0].Facing.X, this.segments[0].Facing.Y), turn);
+            newface = this.Normalize(newface, 100);
             this.segments[0].Facing.X = (int)newface.x;
             this.segments[0].Facing.Y = (int)newface.y;
-            Debug.Log("Tick: " + (currentTick) + "->" + (currentTick+ nticks) + " Facing: " + this.segments[0].Facing.X + "," + this.segments[0].Facing.Y);
+            //Debug.Log("Tick: " + (currentTick) + "->" + (currentTick+ nticks) + " Facing: " + this.segments[0].Facing.X + "," + this.segments[0].Facing.Y);
         }
         
         int snakeDist = this.size / 3;
@@ -437,9 +436,19 @@ public class PlayerSnake
     Vector2 RotateVect2(Vector2 v, float degrees)
     {
         Vector2 result = new Vector2();
-        result.x = v.x * (float)Math.Cos(degrees) - v.y * (float)Math.Sin(degrees);
-        result.y = v.x * (float)Math.Sin(degrees) + v.y * (float)Math.Cos(degrees);
+        result.x = (int) (v.x * (float)Math.Cos(degrees) - v.y * (float)Math.Sin(degrees));
+        result.y = (int) (v.x * (float)Math.Sin(degrees) + v.y * (float)Math.Cos(degrees));
         return result;
     }
 
+    Vector2 Normalize(Vector2 v, int mag)
+    {
+        var oldmag = v.magnitude;
+        if ((int)(oldmag) == mag) {
+            return v;
+        }
+        var x = (int)((v.x / oldmag) * ((float)mag));
+        var y = (int)((v.y / oldmag) * ((float)mag));
+        return new Vector2(x, y);
+    }
 }
