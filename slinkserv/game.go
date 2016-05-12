@@ -163,7 +163,7 @@ func (g *GameSession) Run() {
 
 					if setmsg, ok := msg.net.(*messages.TurnSnake); ok {
 						// st := time.Now()
-						// log.Printf(" setting direction: %v", setmsg.Direction)
+						log.Printf(" Client %d, setting direction: %v @ tick: %d", msg.clientID, setmsg.Direction, setmsg.TickID)
 						// First check if this message is out of date!
 						isOld := false
 						for _, m := range g.commandHistory {
@@ -230,6 +230,8 @@ func (g *GameSession) Run() {
 					fmt.Print("EXITING: Run in Game.go\n")
 					return
 				default:
+					time.Sleep(time.Microsecond)
+					// Don't spinlock cause we don't wanna waste stuff.
 					break
 				}
 			}

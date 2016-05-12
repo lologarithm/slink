@@ -277,7 +277,7 @@ public class ClientState : MonoBehaviour
             foreach (Entity e in snake.segments)
             {
                 var vpp = this.mainCam.WorldToViewportPoint(new Vector3(e.X, e.Y, 0));
-                if (vpp.x > 1.0 || vpp.x < 0.0 || vpp.y < 0.0 || vpp.y > 1.0) {
+                if (vpp.x > 1.1 || vpp.x < -0.1 || vpp.y < -0.1 || vpp.y > 1.0) {
                     if (this.segments.ContainsKey(e.ID)) {
                         Destroy(this.segments[e.ID]);
                         this.segments.Remove(e.ID);
