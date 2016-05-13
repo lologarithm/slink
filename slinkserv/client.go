@@ -58,19 +58,24 @@ func (client *Client) ProcessBytes(disconClient chan Client) {
 	partialMessages := map[uint32][]*messages.Multipart{}
 
 	go func() {
-		for {
-			select {
-			case msg := <-client.FromGameManager:
-				switch tmsg := msg.(type) {
-				case ConnectedGame:
-					activeGame := &clientGame{
-						toGame: tmsg.ToGame,
-						id:     tmsg.ID,
-					}
-					atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&client.activeGame)), unsafe.Pointer(activeGame))
-					log.Printf("Client %d connected to game: %d", client.ID, tmsg.ID)
+		for client.Alive {
+			msg, ok := <-client.FromGameManager
+			if !ok {
+				return
+			}
+			switch tmsg := msg.(type) {
+			case ConnectedGame:
+				activeGame := &clientGame{
+					toGame: tmsg.ToGame,
+					id:     tmsg.ID,
 				}
-			case <-time.After(time.Second * 2):
+				atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&client.activeGame)), unsafe.Pointer(activeGame))
+				log.Printf("Client %d connected to game: %d", client.ID, tmsg.ID)
+			}
+		}
+		go func() {
+			for {
+				time.Sleep(time.Second * 2)
 				if !client.Alive {
 					log.Printf("Client %d: no longer alive.", client.ID)
 					return
@@ -83,13 +88,12 @@ func (client *Client) ProcessBytes(disconClient chan Client) {
 				// If after 5 seconds we haven't gotten any messages, shut er down!
 				lastMsg := time.Unix(atomic.LoadInt64(&client.lastMsg), 0)
 				if time.Now().UTC().Sub(lastMsg).Seconds() > 5 {
-					client.Alive = false
+					client.FromNetwork.Close()
 					log.Printf("Client %d: no message in past %.1f seconds. Closing down.", client.ID, time.Now().UTC().Sub(lastMsg).Seconds())
 					return
 				}
 			}
-		}
-
+		}()
 	}()
 
 	for client.Alive {
@@ -173,7 +177,7 @@ func (client *Client) ProcessBytes(disconClient chan Client) {
 				client.toGameManager <- GameMessage{net: packet.NetMsg, client: client, mtype: packet.Frame.MsgType, clientID: client.ID}
 			default:
 				if client.activeGame == nil {
-					log.Printf("Client sent message (%d:%v) before in a game!", packet.Frame.MsgType, packet.NetMsg)
+					// log.Printf("Client sent message (%d:%v) before in a game!", packet.Frame.MsgType, packet.NetMsg)
 					break
 				}
 				client.activeGame.toGame <- GameMessage{net: packet.NetMsg, client: client, mtype: packet.Frame.MsgType, clientID: client.ID}

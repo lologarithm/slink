@@ -114,7 +114,6 @@ func (gm *GameManager) createGame(msg GameMessage) {
 	g := NewGame(gm.FromGames, gm.ToNetwork)
 	g.ID = gm.NextGameID
 	go g.Run()
-
 	log.Printf("Launched new game: %d", g.ID)
 	gm.Games[gm.NextGameID] = g
 }
@@ -122,7 +121,7 @@ func (gm *GameManager) createGame(msg GameMessage) {
 func (gm *GameManager) handleConnection(msg GameMessage) {
 	// First make sure this is a new connection.
 	if gm.Users[msg.client.ID] == nil {
-		log.Printf("New user connected: %d", msg.client.ID)
+		// log.Printf("New user connected: %d", msg.client.ID)
 		gm.Users[msg.client.ID] = &User{
 			Client:  msg.client,
 			Account: &Account{},
@@ -131,11 +130,11 @@ func (gm *GameManager) handleConnection(msg GameMessage) {
 }
 
 func (gm *GameManager) handleDisconnect(msg GameMessage) {
-	log.Printf("GM: handling disconnect now: %d", msg.client.ID)
+	// log.Printf("GM: handling disconnect now: %d", msg.client.ID)
 	// message active game that player disconnected.
 	gameid := gm.Users[msg.client.ID].GameID
 	if gm.Games[gameid] != nil {
-		log.Printf("Signalling game %d to remove player %d.", gameid, msg.client.ID)
+		// log.Printf("Signalling game %d to remove player %d.", gameid, msg.client.ID)
 		gm.Games[gameid].FromGameManager <- RemovePlayer{Client: msg.client}
 	}
 	// Then clear out the user.
@@ -148,7 +147,7 @@ func (gm *GameManager) createAccount(msg GameMessage) {
 		AccountID: 0,
 		Name:      netmsg.Name,
 	}
-	log.Printf("Trying to login: %s", netmsg.Name)
+	// log.Printf("Trying to login: %s", netmsg.Name)
 	if _, ok := gm.AcctByName[netmsg.Name]; !ok {
 		gm.AccountID++
 		gm.Accounts[gm.AccountID] = &Account{
@@ -161,7 +160,7 @@ func (gm *GameManager) createAccount(msg GameMessage) {
 
 		gm.AcctByName[netmsg.Name] = gm.Accounts[gm.AccountID]
 		gm.Users[msg.client.ID].Account = gm.Accounts[gm.AccountID]
-		log.Printf("logged in: %s", netmsg.Name)
+		// log.Printf("logged in: %s", netmsg.Name)
 	}
 
 	resp := NewOutgoingMsg(msg.client, messages.CreateAcctRespMsgType, ac)
@@ -176,7 +175,7 @@ func (gm *GameManager) loginUser(msg GameMessage) {
 	}
 	if acct, ok := gm.AcctByName[tmsg.Name]; ok {
 		if acct.Password == tmsg.Password {
-			log.Printf("Logging in account: %s", tmsg.Name)
+			// log.Printf("Logging in account: %s", tmsg.Name)
 			lr.AccountID = acct.ID
 			gm.Users[msg.client.ID].Account = acct
 		}

@@ -42,7 +42,7 @@ func (s *Server) handleMessage() {
 	}
 	if _, ok := s.connections[addrkey]; !ok {
 		s.clientID++
-		fmt.Printf("New Connection: %v, ID: %d\n", addrkey, s.clientID)
+		// fmt.Printf("New Connection: %v, ID: %d\n", addrkey, s.clientID)
 		s.connections[addrkey] = &Client{
 			address:         addr,
 			FromNetwork:     NewBytePipe(0),
@@ -60,8 +60,10 @@ func (s *Server) handleMessage() {
 
 func (s *Server) DisconnectConn(addrkey string) {
 	// fmt.Printf("  Closing connection for client: %d.\n", s.connections[addrkey].ID)
-	s.connections[addrkey].FromNetwork.Close()
-	delete(s.connections, addrkey)
+	if s.connections[addrkey] != nil && s.connections[addrkey].FromNetwork != nil {
+		s.connections[addrkey].FromNetwork.Close()
+		delete(s.connections, addrkey)
+	}
 }
 
 var maxPacketSize int = 512
@@ -69,8 +71,11 @@ var maxPacketSize int = 512
 func (s *Server) sendMessages() {
 	for {
 		msg := <-s.outToNetwork
-		msg.msg.Frame.Seq = msg.dest.Seq
-		msgcontent := msg.msg.Pack()
+		msgcontent := msg.data
+		if len(msgcontent) == 0 {
+			msg.msg.Frame.Seq = msg.dest.Seq
+			msgcontent = msg.msg.Pack()
+		}
 		totallen := len(msgcontent)
 		if totallen > maxPacketSize {
 			// calculate how many parts we have to split this into
@@ -165,4 +170,5 @@ func RunServer(s Server, exit chan int) {
 type OutgoingMessage struct {
 	dest *Client
 	msg  messages.Packet
+	data []byte
 }

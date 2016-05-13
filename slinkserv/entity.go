@@ -52,9 +52,8 @@ func NewSnake(id uint32, name string) *Snake {
 	}
 	for i := 0; i < 10; i++ {
 		e := &Entity{
-			ID:          id + uint32(i+1),
-			EType:       ETypeSegment,
-			ContainerID: id,
+			ID:    id + uint32(i+1),
+			EType: ETypeSegment,
 			Position: physics.Vect2{
 				X: pos.X,
 				Y: pos.Y - (snake.Size/2)*int32(i+1),
@@ -69,13 +68,20 @@ func NewSnake(id uint32, name string) *Snake {
 
 // Entity represents a single object in the game.
 type Entity struct {
-	ID          uint32
-	Name        string
-	EType       uint16
-	Size        int32 // Radius
-	ContainerID uint32
-	Position    physics.Vect2 // Center of entity
-	Facing      physics.Vect2
+	ID       uint32
+	Name     string
+	EType    uint16
+	Size     int32         // Radius
+	Position physics.Vect2 // Center of entity
+	Facing   physics.Vect2
+}
+
+func (e *Entity) Clone() quadtree.BoundingBoxer {
+	ne := &Entity{}
+	*ne = *e
+	ne.Position = e.Position
+	ne.Facing = e.Facing
+	return ne
 }
 
 func (e *Entity) toMsg() *messages.Entity {
@@ -89,7 +95,6 @@ func (e *Entity) toMsg() *messages.Entity {
 			X: e.Facing.X,
 			Y: e.Facing.Y,
 		},
-		ContainerID: e.ContainerID,
 	}
 
 	return o

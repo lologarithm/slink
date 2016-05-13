@@ -11,7 +11,7 @@ import (
 	"github.com/lologarithm/slink/slinkserv/automation"
 )
 
-var numClient = 5
+var numClient = 500
 
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
@@ -31,7 +31,7 @@ func main() {
 		} else {
 			c <- os.Interrupt
 		}
-		time.Sleep(time.Millisecond)
+		time.Sleep(time.Millisecond * 10)
 	}
 
 	log.Printf("%d clients started.", numClient)

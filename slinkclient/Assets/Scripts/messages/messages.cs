@@ -299,7 +299,6 @@ public class GameMasterFrame : INet {
 public class Entity : INet {
 	public uint ID;
 	public ushort EType;
-	public uint ContainerID;
 	public int X;
 	public int Y;
 	public int Size;
@@ -308,7 +307,6 @@ public class Entity : INet {
 	public void Serialize(BinaryWriter buffer) {
 		buffer.Write(this.ID);
 		buffer.Write(this.EType);
-		buffer.Write(this.ContainerID);
 		buffer.Write(this.X);
 		buffer.Write(this.Y);
 		buffer.Write(this.Size);
@@ -318,7 +316,6 @@ public class Entity : INet {
 	public void Deserialize(BinaryReader buffer) {
 		this.ID = buffer.ReadUInt32();
 		this.EType = buffer.ReadUInt16();
-		this.ContainerID = buffer.ReadUInt32();
 		this.X = buffer.ReadInt32();
 		this.Y = buffer.ReadInt32();
 		this.Size = buffer.ReadInt32();

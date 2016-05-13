@@ -59,7 +59,6 @@ class GameMasterFrame {
 class Entity {
  ID uint32
  EType uint16
- ContainerID uint32
  X int32
  Y int32
  Size int32

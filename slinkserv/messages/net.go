@@ -421,7 +421,6 @@ func (m *GameMasterFrame) Len() int {
 type Entity struct {
 	ID uint32
 	EType uint16
-	ContainerID uint32
 	X int32
 	Y int32
 	Size int32
@@ -431,7 +430,6 @@ type Entity struct {
 func (m *Entity) Serialize(buffer *bytes.Buffer) {
 	binary.Write(buffer, binary.LittleEndian, m.ID)
 	binary.Write(buffer, binary.LittleEndian, m.EType)
-	binary.Write(buffer, binary.LittleEndian, m.ContainerID)
 	binary.Write(buffer, binary.LittleEndian, m.X)
 	binary.Write(buffer, binary.LittleEndian, m.Y)
 	binary.Write(buffer, binary.LittleEndian, m.Size)
@@ -441,7 +439,6 @@ func (m *Entity) Serialize(buffer *bytes.Buffer) {
 func (m *Entity) Deserialize(buffer *bytes.Buffer) {
 	binary.Read(buffer, binary.LittleEndian, &m.ID)
 	binary.Read(buffer, binary.LittleEndian, &m.EType)
-	binary.Read(buffer, binary.LittleEndian, &m.ContainerID)
 	binary.Read(buffer, binary.LittleEndian, &m.X)
 	binary.Read(buffer, binary.LittleEndian, &m.Y)
 	binary.Read(buffer, binary.LittleEndian, &m.Size)
@@ -453,7 +450,6 @@ func (m *Entity) Len() int {
 	mylen := 0
 	mylen += 4
 	mylen += 2
-	mylen += 4
 	mylen += 4
 	mylen += 4
 	mylen += 4

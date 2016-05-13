@@ -351,7 +351,7 @@ public class ClientState : MonoBehaviour
         backMat.mainTextureScale = new Vector2(cameraHeight / TEXTURE_SIZE / 4f, cameraWidth / TEXTURE_SIZE / 4f);
         backMat.SetTextureOffset("_MainTex", new Vector2(xOffset, yOffset * -1));
 
-        Debug.Log((cameraHeight / TEXTURE_SIZE / 10f) + " " + (cameraWidth / TEXTURE_SIZE / 10f));
+        // Debug.Log((cameraHeight / TEXTURE_SIZE / 10f) + " " + (cameraWidth / TEXTURE_SIZE / 10f));
     }
 }
 

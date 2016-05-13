@@ -1,6 +1,8 @@
 package slinkserv
 
 import (
+	"log"
+
 	"github.com/lologarithm/slink/slinkserv/messages"
 	"github.com/lologarithm/survival/physics"
 	"github.com/lologarithm/survival/physics/quadtree"
@@ -12,7 +14,8 @@ type GameWorld struct {
 	Entities       map[uint32]*Entity
 	Snakes         map[uint32]*Snake
 	Tree           quadtree.QuadTree
-	TickID         uint32
+	CurrentTickID  uint32 // Can be rewound to recalculate old ticks.
+	RealTickID     uint32 // The actual current tick.
 	TicksPerSecond float64
 	TickLength     float64
 }
@@ -37,15 +40,26 @@ func NewWorld() *GameWorld {
 // Clone returns a deep copy of the game world at this time.
 func (gw *GameWorld) Clone() *GameWorld {
 	nw := NewWorld()
-	nw.TickID = gw.TickID
-	for k, e := range gw.Entities {
-		ne := &Entity{}
-		*ne = *e
-		ne.Position = e.Position
-		ne.Facing = e.Facing
+	nw.CurrentTickID = gw.CurrentTickID
+	nw.RealTickID = gw.RealTickID // When we rewind old states should have the 'current' state.
+	nw.Tree = *gw.Tree.Clone()
+	nw.Entities = make(map[uint32]*Entity, len(gw.Entities))
+	nw.Snakes = make(map[uint32]*Snake, len(gw.Snakes))
 
-		nw.Entities[k] = ne
-		nw.Tree.Add(ne)
+	children := gw.Tree.Query(quadtree.BoundingBox{
+		MinX: -1000000,
+		MaxX: 1000000,
+		MinY: -1000000,
+		MaxY: 1000000,
+	})
+
+	if len(children) != len(gw.Entities) {
+		log.Printf("children: %d, entities: %d", len(children), len(gw.Entities))
+		panic("Incorrect number of children")
+	}
+
+	for k, e := range children {
+		nw.Entities[uint32(k)] = e.(*Entity)
 	}
 
 	for k, s := range gw.Snakes {
@@ -102,6 +116,16 @@ func (gw *GameWorld) Tick() []Collision {
 			X: snake.Position.X + int32(float64(snake.Facing.X)*tickmv),
 			Y: snake.Position.Y + int32(float64(snake.Facing.Y)*tickmv),
 		}
+		if newpos.X > 999999 {
+			newpos.X = -999999
+		} else if newpos.X < -999999 {
+			newpos.X = 999999
+		}
+		if newpos.Y > 999999 {
+			newpos.Y = -999999
+		} else if newpos.Y < -999999 {
+			newpos.Y = 999999
+		}
 		snake.Position = newpos
 
 		for _, seg := range snake.Segments {
@@ -127,6 +151,6 @@ func (gw *GameWorld) Tick() []Collision {
 
 	// If head touches body, head dies
 	// If head touches head, bigger head wins.
-	gw.TickID++
+	gw.CurrentTickID++
 	return nil
 }
