@@ -2,6 +2,8 @@ using UnityEngine;
 using System;
 using System.Collections.Generic;
 using UnityEngine.UI;
+using Assets.Scripts;
+using Assets.Utils;
 
 public class ClientState : MonoBehaviour
 {
@@ -69,7 +71,7 @@ public class ClientState : MonoBehaviour
 		}
         if (this.updateGame()) // Only allow dir changes on ticks.
         {
-            short currentTurn = this.game.players[this.mySnake].turning;
+            short currentTurn = this.game.players[this.mySnake].turnDirection;
             short newTurn = 0;
             if (Input.GetKey(KeyCode.A) || Input.GetKey(KeyCode.LeftArrow))
             {
@@ -81,7 +83,7 @@ public class ClientState : MonoBehaviour
             }
             
             if (currentTurn != newTurn) {
-                this.game.players[this.mySnake].turning = newTurn;
+                this.game.players[this.mySnake].turnDirection = newTurn;
                 this.SetDirection(newTurn);
             }
         }
@@ -201,7 +203,7 @@ public class ClientState : MonoBehaviour
             case MsgType.TurnSnake:
                 TurnSnake sd = ((TurnSnake)parsedMsg);
                 if (this.game.players.ContainsKey(sd.ID) ) {
-                    this.game.players[sd.ID].turning = sd.Direction;    
+                    this.game.players[sd.ID].turnDirection = sd.Direction;    
                 }
                 break;
             case MsgType.GameConnected:
@@ -232,7 +234,7 @@ public class ClientState : MonoBehaviour
                 // Now update local entities based on difference between master tick and now.
                 foreach (KeyValuePair<uint, PlayerSnake> entry in this.game.players)
                 {
-                    entry.Value.Move(nticks, this.game.TicksPerSecond, this.game.Tick);
+                    entry.Value.Move(nticks, GameConstants.TicksPerSecond, this.game.Tick);
                 }
                 break;
 		}
@@ -251,7 +253,7 @@ public class ClientState : MonoBehaviour
             ps.size = this.game.entities[s.Segments[0]].Size;
             ps.segments = new Entity[s.Segments.Length+1];
             ps.segments[0] = head;
-            ps.turning = s.Turning;
+            ps.turnDirection = s.Turning;
             for (int j = 0; j < s.Segments.Length; j++)
             {
                 ps.segments[j+1] = this.game.entities[s.Segments[j]];
@@ -272,7 +274,7 @@ public class ClientState : MonoBehaviour
             PlayerSnake snake = entry.Value;
 
             int nticks = (int)(this.game.Tick - this.game.LastTickUpdated);
-            snake.Move(nticks, this.game.TicksPerSecond, this.game.Tick);
+            snake.Move(nticks, GameConstants.TicksPerSecond, this.game.Tick);
 
             foreach (Entity e in snake.segments)
             {
@@ -350,8 +352,6 @@ public class ClientState : MonoBehaviour
         background.transform.localScale = new Vector3(xScale, 1, yScale);
         backMat.mainTextureScale = new Vector2(cameraHeight / TEXTURE_SIZE / 4f, cameraWidth / TEXTURE_SIZE / 4f);
         backMat.SetTextureOffset("_MainTex", new Vector2(xOffset, yOffset * -1));
-
-        Debug.Log((cameraHeight / TEXTURE_SIZE / 10f) + " " + (cameraWidth / TEXTURE_SIZE / 10f));
     }
 }
 
@@ -361,9 +361,6 @@ public class GameInstance
 	public string Name;
     public Dictionary<uint, Entity> entities = new Dictionary<uint, Entity>();
     public Dictionary<uint, PlayerSnake> players = new Dictionary<uint, PlayerSnake>(); // List of players
-
-    public float TicksPerSecond = 50; // TODO: what do
-    public float TickLength = 20; // TODO: what do
         
 	public uint LastTickUpdated;
 	public uint Tick;
@@ -374,7 +371,7 @@ public class GameInstance
 	public DateTime StartTime;
 
 	public void UpdateTick() {
-		this.Tick = this.StartTick + (uint)( (DateTime.Now - this.StartTime).TotalMilliseconds / TickLength); // TODO: should this be hardcoded?
+		this.Tick = this.StartTick + (uint)( (DateTime.Now - this.StartTime).TotalMilliseconds / GameConstants.TickLength); // TODO: should this be hardcoded?
 	}
 }
 
@@ -385,30 +382,23 @@ public class PlayerSnake
     public int speed;
     public int size;
 	public Entity[] segments;
-    public short turning = 0;
+    public short turnDirection = 0;
 
     public void Move(int nticks, float tickPerSecond, uint currentTick)
     {
-        if (this.turning != 0) {
-            float turn = -0.06f;
-			if (this.turning == -1) {
-				turn = 0.06f;
-			}
-            turn *= nticks;
-			var newface = this.RotateVect2(new Vector2(this.segments[0].Facing.X, this.segments[0].Facing.Y), turn);
-            newface = this.Normalize(newface, 100);
-            this.segments[0].Facing.X = (int)newface.x;
-            this.segments[0].Facing.Y = (int)newface.y;
-            //Debug.Log("Tick: " + (currentTick) + "->" + (currentTick+ nticks) + " Facing: " + this.segments[0].Facing.X + "," + this.segments[0].Facing.Y);
+        if (this.isTurning()) {
+            float turn = GameConstants.TurningSpeed * this.turnDirection * nticks;
+
+            var newface = VectorUtils.RotateVect2(VectorUtils.NetworkToGameVect2(this.segments[0].Facing), turn);
+            newface = newface.normalized * 100;
+            this.segments[0].Facing = VectorUtils.GameToNetworkVect2(newface);
         }
         
         int snakeDist = this.size / 3;
         double spPerTick = (((float)this.speed) / tickPerSecond) / 100.0;
         double dist = spPerTick * nticks;
-        int totalX = (int)(((double)this.segments[0].Facing.X) * dist);
-        int totalY = (int)(((double)this.segments[0].Facing.Y) * dist);
-        this.segments[0].X += totalX; 
-        this.segments[0].Y += totalY;
+        this.segments[0].X += (int)(((double)this.segments[0].Facing.X) * dist);
+        this.segments[0].Y += (int)(((double)this.segments[0].Facing.Y) * dist);
 
         Vector2 prevPos = new Vector2(this.segments[0].X, this.segments[0].Y);
         foreach (Entity seg in this.segments)
@@ -427,28 +417,13 @@ public class PlayerSnake
                 seg.X += (int)movevect.x;
                 seg.Y += (int)movevect.y;
             }
-            seg.Facing.X = (int)facing.x;
-            seg.Facing.Y = (int)facing.y;
+            seg.Facing = VectorUtils.GameToNetworkVect2(facing);
             prevPos = new Vector2(seg.X, seg.Y);
         }
     }
-    
-    Vector2 RotateVect2(Vector2 v, float degrees)
-    {
-        Vector2 result = new Vector2();
-        result.x = (int) (v.x * (float)Math.Cos(degrees) - v.y * (float)Math.Sin(degrees));
-        result.y = (int) (v.x * (float)Math.Sin(degrees) + v.y * (float)Math.Cos(degrees));
-        return result;
-    }
 
-    Vector2 Normalize(Vector2 v, int mag)
+    private Boolean isTurning()
     {
-        var oldmag = v.magnitude;
-        if ((int)(oldmag) == mag) {
-            return v;
-        }
-        var x = (int)((v.x / oldmag) * ((float)mag));
-        var y = (int)((v.y / oldmag) * ((float)mag));
-        return new Vector2(x, y);
+        return this.turnDirection != 0;
     }
 }
