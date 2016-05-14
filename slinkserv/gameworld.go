@@ -117,18 +117,19 @@ func (gw *GameWorld) EntitiesMsg() []*messages.Entity {
 	es := make([]*messages.Entity, len(gw.Entities))
 	idx := 0
 	for _, e := range gw.Entities {
-		es[idx] = e.toMsg()
-		idx++
+		if e.EType != ETypeFood {
+			es[idx] = e.toMsg()
+			idx++
+		}
 	}
 
-	return es
+	return es[:idx]
 }
 
 // SnakesMsg converts all snakes in the world to a network message.
 func (gw *GameWorld) SnakesMsg() []*messages.Snake {
 	es := make([]*messages.Snake, len(gw.Snakes))
 	idx := 0
-	log.Printf("Master frame snake list: %d", len(gw.Snakes))
 	for _, snake := range gw.Snakes {
 		es[idx] = snake.toSnakeMsg()
 		idx++
@@ -145,7 +146,7 @@ func (gw *GameWorld) Tick() []Collision {
 				turn = 0.06
 			}
 			snake.Facing = physics.NormalizeVect2(physics.RotateVect2(snake.Facing, turn), 100)
-			// log.Printf("Snake %d, facing: %v", snake.ID, snake.Facing)
+			log.Printf("Snake %d, facing: %v", snake.ID, snake.Facing)
 		}
 
 		// Advance snake

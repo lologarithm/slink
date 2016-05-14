@@ -181,6 +181,8 @@ public class ClientState : MonoBehaviour
 					{
 						Debug.LogError("Multipart message content parsing failed... we done goofed");
 					}
+                    Debug.Log("Multipart len:" + content.Length);
+                    Debug.Log("newpacket CL: " + newpacket.content_length);
 					this.ParseAndProcess(newpacket);
 				}
 				// 5. clean up!
