@@ -180,7 +180,7 @@ func (g *GameSession) Run() {
 					}
 					setmsg.ID = client.SnakeID
 
-					// log.Printf("Handling snake %d turning at: %d", setmsg.ID, setmsg.TickID)
+					log.Printf("Handling snake %d turning at: %d", setmsg.ID, setmsg.TickID)
 					if g.World.CurrentTickID >= setmsg.TickID {
 						g.resetToHistory(setmsg.TickID - 1)
 					}

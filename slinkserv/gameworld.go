@@ -146,7 +146,7 @@ func (gw *GameWorld) Tick() []Collision {
 				turn = 0.06
 			}
 			snake.Facing = physics.NormalizeVect2(physics.RotateVect2(snake.Facing, turn), 100)
-			log.Printf("Snake %d, facing: %v", snake.ID, snake.Facing)
+			log.Printf("Snake %d, facing: %v tick %d", snake.ID, snake.Facing, gw.CurrentTickID)
 		}
 
 		// Advance snake
