@@ -1,6 +1,7 @@
 package slinkserv
 
 import (
+	"log"
 	"math/rand"
 
 	"github.com/lologarithm/slink/slinkserv/messages"
@@ -81,6 +82,9 @@ func (e *Entity) Clone() quadtree.BoundingBoxer {
 	*ne = *e
 	ne.Position = e.Position
 	ne.Facing = e.Facing
+	if e.ID == 1 {
+		log.Printf("Cloning snake entity, facing:%v, newfacing: %v", e.Facing, ne.Facing)
+	}
 	return ne
 }
 

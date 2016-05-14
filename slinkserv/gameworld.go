@@ -101,6 +101,7 @@ func (gw *GameWorld) Clone() *GameWorld {
 		*ns = *s
 		ns.Entity = nw.Entities[k]
 		ns.Segments = make([]*Entity, len(s.Segments))
+		log.Printf("Snake %d, facing: %v, nsfacing: %v", s.ID, s.Facing, ns.Facing)
 		for idx, seg := range s.Segments {
 			ns.Segments[idx] = nw.Entities[seg.ID]
 			if ns.Segments[idx] == nil {
@@ -138,6 +139,7 @@ func (gw *GameWorld) SnakesMsg() []*messages.Snake {
 }
 
 func (gw *GameWorld) Tick() []Collision {
+	log.Printf("Ticking %d", gw.CurrentTickID)
 	for _, snake := range gw.Snakes {
 		// Apply turning
 		if snake.Turning != 0 {
@@ -145,7 +147,7 @@ func (gw *GameWorld) Tick() []Collision {
 			if snake.Turning == -1 {
 				turn = 0.06
 			}
-			snake.Facing = physics.NormalizeVect2(physics.RotateVect2(snake.Facing, turn), 100)
+			snake.Entity.Facing = physics.NormalizeVect2(physics.RotateVect2(snake.Facing, turn), 100)
 			log.Printf("Snake %d, facing: %v tick %d", snake.ID, snake.Facing, gw.CurrentTickID)
 		}
 
