@@ -130,11 +130,11 @@ func (gm *GameManager) handleConnection(msg GameMessage) {
 }
 
 func (gm *GameManager) handleDisconnect(msg GameMessage) {
-	// log.Printf("GM: handling disconnect now: %d", msg.client.ID)
+	log.Printf("GM: handling disconnect now: %d", msg.client.ID)
 	// message active game that player disconnected.
 	gameid := gm.Users[msg.client.ID].GameID
 	if gm.Games[gameid] != nil {
-		// log.Printf("Signalling game %d to remove player %d.", gameid, msg.client.ID)
+		log.Printf("Signalling game %d to remove player %d.", gameid, msg.client.ID)
 		gm.Games[gameid].FromGameManager <- RemovePlayer{Client: msg.client}
 	}
 	// Then clear out the user.

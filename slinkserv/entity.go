@@ -116,14 +116,20 @@ func (e *Entity) Intersects(o *Entity) bool {
 	// return sizediff*sizediff <= centerdist // is the circle contained?
 }
 
-// BoundingBox is used for quadtree bounding checks.
-func (e *Entity) BoundingBox() quadtree.BoundingBox {
+// Bounds is used for quadtree bounding checks.
+func (e *Entity) Bounds() quadtree.BoundingBox {
 	return quadtree.BoundingBox{
 		MinX: e.Position.X - e.Size,
 		MaxX: e.Position.X + e.Size,
 		MinY: e.Position.Y - e.Size,
 		MaxY: e.Position.Y + e.Size,
 	}
+}
+
+// SetBounds will set this entity to a new location
+func (e *Entity) SetBounds(box quadtree.BoundingBox) {
+	e.Position.X = box.MinX + (box.SizeX() / 2)
+	e.Position.Y = box.MinY + (box.SizeY() / 2)
 }
 
 // BoxID is used for quadtree intersection checks.

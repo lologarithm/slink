@@ -58,21 +58,6 @@ func (client *Client) ProcessBytes(disconClient chan Client) {
 	partialMessages := map[uint32][]*messages.Multipart{}
 
 	go func() {
-		for client.Alive {
-			msg, ok := <-client.FromGameManager
-			if !ok {
-				return
-			}
-			switch tmsg := msg.(type) {
-			case ConnectedGame:
-				activeGame := &clientGame{
-					toGame: tmsg.ToGame,
-					id:     tmsg.ID,
-				}
-				atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&client.activeGame)), unsafe.Pointer(activeGame))
-				log.Printf("Client %d connected to game: %d", client.ID, tmsg.ID)
-			}
-		}
 		go func() {
 			for {
 				time.Sleep(time.Second * 2)
@@ -94,6 +79,22 @@ func (client *Client) ProcessBytes(disconClient chan Client) {
 				}
 			}
 		}()
+
+		for client.Alive {
+			msg, ok := <-client.FromGameManager
+			if !ok {
+				return
+			}
+			switch tmsg := msg.(type) {
+			case ConnectedGame:
+				activeGame := &clientGame{
+					toGame: tmsg.ToGame,
+					id:     tmsg.ID,
+				}
+				atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&client.activeGame)), unsafe.Pointer(activeGame))
+				log.Printf("Client %d connected to game: %d", client.ID, tmsg.ID)
+			}
+		}
 	}()
 
 	for client.Alive {

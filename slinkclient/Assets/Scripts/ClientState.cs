@@ -71,6 +71,9 @@ public class ClientState : MonoBehaviour
 		}
         if (this.updateGame()) // Only allow dir changes on ticks.
         {
+            if (!this.game.entities.ContainsKey(this.mySnake)) {
+                return;
+            }
             short currentTurn = this.game.players[this.mySnake].turnDirection;
             short newTurn = 0;
             if (Input.GetKey(KeyCode.A) || Input.GetKey(KeyCode.LeftArrow))
@@ -218,6 +221,7 @@ public class ClientState : MonoBehaviour
 				break;
             case MsgType.GameMasterFrame:
                 GameMasterFrame gmf = ((GameMasterFrame)parsedMsg);
+                Debug.Log("Got master frame @ " + gmf.Tick);
                 this.game.entities.Clear();
                 this.game.players.Clear();
                 this.loadEntities(gmf.Entities, gmf.Snakes);
@@ -244,6 +248,7 @@ public class ClientState : MonoBehaviour
         foreach (Entity e in ents) {
             this.game.entities[e.ID] = e;
         }
+        Debug.Log("Num snakes in master: " + snakes.Length);
         foreach (Snake s in snakes) {
             Entity head = this.game.entities[s.ID];
             PlayerSnake ps = new PlayerSnake();
@@ -332,6 +337,9 @@ public class ClientState : MonoBehaviour
 
     private void updateCamera() 
     {
+        if (!this.game.entities.ContainsKey(this.mySnake)) {
+            return;
+        }
         Entity mysnake = this.game.entities[this.mySnake];
         this.mainCam.transform.position = new Vector3(mysnake.X, mysnake.Y, -100);
         this.mainCam.orthographicSize = mysnake.Size * 10;
