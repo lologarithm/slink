@@ -52,13 +52,14 @@ func (gw *GameWorld) Clone() *GameWorld {
 	nw.Snakes = make(map[uint32]*Snake, len(gw.Snakes))
 
 	max := int32(MapSize + 1)
-	children := gw.Tree.Query(quadtree.BoundingBox{
+	children := nw.Tree.Query(quadtree.BoundingBox{
 		MinX: -max,
 		MaxX: max,
 		MinY: -max,
 		MaxY: max,
 	})
 
+	// TODO: Remove this one day, this is just validation code to ensure we clone correctly.
 	if len(children) != len(gw.Entities) {
 		log.Printf("Cloning currenttick: %d, realtick: %d", gw.CurrentTickID, gw.RealTickID)
 		log.Printf("children: %d, entities: %d", len(children), len(gw.Entities))
@@ -95,13 +96,15 @@ func (gw *GameWorld) Clone() *GameWorld {
 		ent := e.(*Entity)
 		nw.Entities[uint32(ent.ID)] = ent
 	}
-
 	for k, s := range gw.Snakes {
-		ns := &Snake{}
-		*ns = *s
+		ns := &Snake{
+			Speed:   s.Speed,
+			Turning: s.Turning,
+			Entity:  &Entity{},
+		}
 		ns.Entity = nw.Entities[k]
 		ns.Segments = make([]*Entity, len(s.Segments))
-		log.Printf("Snake %d, facing: %v, nsfacing: %v", s.ID, s.Facing, ns.Facing)
+
 		for idx, seg := range s.Segments {
 			ns.Segments[idx] = nw.Entities[seg.ID]
 			if ns.Segments[idx] == nil {
@@ -139,7 +142,6 @@ func (gw *GameWorld) SnakesMsg() []*messages.Snake {
 }
 
 func (gw *GameWorld) Tick() []Collision {
-	log.Printf("Ticking %d", gw.CurrentTickID)
 	for _, snake := range gw.Snakes {
 		// Apply turning
 		if snake.Turning != 0 {
@@ -148,7 +150,7 @@ func (gw *GameWorld) Tick() []Collision {
 				turn = 0.06
 			}
 			snake.Entity.Facing = physics.NormalizeVect2(physics.RotateVect2(snake.Facing, turn), 100)
-			log.Printf("Snake %d, facing: %v tick %d", snake.ID, snake.Facing, gw.CurrentTickID)
+			// log.Printf("Snake %d, facing: %v tick %d", snake.ID, snake.Facing, gw.CurrentTickID)
 		}
 
 		// Advance snake
@@ -172,7 +174,7 @@ func (gw *GameWorld) Tick() []Collision {
 		snake.Entity.Position = newpos
 		move := gw.Tree.Move(snake.Entity, oldBounds)
 		if move != 2 {
-			panic("move failed")
+			panic("move of snake head failed")
 		}
 
 		for _, seg := range snake.Segments {
@@ -186,7 +188,11 @@ func (gw *GameWorld) Tick() []Collision {
 				}
 				oldBounds = seg.Bounds()
 				seg.Position = newpos
-				gw.Tree.Move(seg, oldBounds)
+				move = gw.Tree.Move(seg, oldBounds)
+				if move != 2 {
+					log.Printf("Move returned %d, when trying to move snake %d body segment %d", move, snake.ID, seg.ID)
+					panic("failed to move snake body segment")
+				}
 			}
 			seg.Facing = movevect
 			newpos = seg.Position

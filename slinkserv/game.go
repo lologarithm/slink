@@ -8,7 +8,6 @@ import (
 
 	"github.com/lologarithm/slink/slinkserv/messages"
 	"github.com/lologarithm/survival/physics"
-	"github.com/lologarithm/survival/physics/quadtree"
 )
 
 // Entity type constants
@@ -180,7 +179,7 @@ func (g *GameSession) Run() {
 					}
 					setmsg.ID = client.SnakeID
 
-					log.Printf("Handling snake %d turning (%d) at tick: %d", setmsg.ID, setmsg.Direction, setmsg.TickID)
+					// log.Printf("Handling snake %d turning (%d) at tick: %d", setmsg.ID, setmsg.Direction, setmsg.TickID)
 					if g.World.CurrentTickID >= setmsg.TickID {
 						g.resetToHistory(setmsg.TickID - 1)
 					}
@@ -282,28 +281,16 @@ func (g *GameSession) Run() {
 }
 
 func (g *GameSession) removeSnake(snake *Snake) {
-	log.Printf("Removing snake id: %d", snake.ID)
 	if g.World.Entities[snake.ID] == nil {
+		log.Printf("Removing snake id: %d", snake.ID)
 		log.Printf("Snake isn't in world entities.")
 	}
 	// Remove snake from entities and tree
 	delete(g.World.Entities, snake.ID)
 	found := g.World.Tree.Remove(snake.Entity)
 	if !found {
-		max := int32(MapSize + 1)
-		allthings := g.World.Tree.Query(quadtree.BoundingBox{
-			MinX: -max,
-			MaxX: max,
-			MinY: -max,
-			MaxY: max,
-		})
-		for _, e := range allthings {
-			if e.BoxID() == snake.ID {
-				log.Printf("snake found in query but not remove?!")
-			}
-		}
 		log.Printf("Failed to remove snake %d!?", snake.ID)
-		panic("error removing")
+		panic("error removing snake from world.")
 	}
 
 	// Remove all segments
@@ -332,7 +319,6 @@ func (g *GameSession) addEntity(ID uint32, etype uint16, loc physics.Vect2, size
 
 // addPlayer will create a snake, add it to the game, and return the successful connection message to the player.
 func (g *GameSession) addPlayer(ap AddPlayer) {
-	log.Printf("")
 	newid := (g.World.MaxID + 1)
 	snake := NewSnake(newid, ap.Entity.Name)
 	g.World.MaxID += 1 + uint32(len(snake.Segments))
@@ -370,14 +356,13 @@ func (g *GameSession) addPlayer(ap AddPlayer) {
 }
 
 func (g *GameSession) addSnake(newid uint32, name string) {
-	log.Printf("Adding snake in tick: %d", newid)
+	log.Printf("Adding snake after tick: %d", newid)
 	if g.World.Snakes[newid] != nil {
 		log.Printf("Snake already exists!?!?: %d", newid)
-		return
+		panic("tried to add snake twice.")
 	}
 	g.World.Snakes[newid] = NewSnake(newid, name)
 	g.World.Entities[newid] = g.World.Snakes[newid].Entity
-	log.Printf("  adding to tree: %v", g.World.Snakes[newid].Entity.Bounds())
 	g.World.Tree.Add(g.World.Snakes[newid].Entity)
 
 	for _, s := range g.World.Snakes[newid].Segments {

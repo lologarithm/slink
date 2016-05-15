@@ -1,7 +1,6 @@
 package slinkserv
 
 import (
-	"log"
 	"math/rand"
 
 	"github.com/lologarithm/slink/slinkserv/messages"
@@ -77,14 +76,10 @@ type Entity struct {
 	Facing   physics.Vect2
 }
 
+// Clone is added to fulfill quadtree BoundingBoxer interface.
 func (e *Entity) Clone() quadtree.BoundingBoxer {
 	ne := &Entity{}
 	*ne = *e
-	ne.Position = e.Position
-	ne.Facing = e.Facing
-	if e.ID == 1 {
-		log.Printf("Cloning snake entity, facing:%v, newfacing: %v", e.Facing, ne.Facing)
-	}
 	return ne
 }
 
