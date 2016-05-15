@@ -240,22 +240,22 @@ func (g *GameSession) Run() {
 			// Advance 'real' state if the current state has caught up.
 			if g.World.CurrentTickID == g.World.RealTickID {
 				// Spawn food if players are around
-				if len(g.Clients) > 0 || len(g.World.Entities) < 10000 {
-					for i := 0; i < 1; i++ {
-						g.World.MaxID++
-						x := rand.Intn((MapSize-2)*2) - (MapSize - 1)
-						y := rand.Intn((MapSize-2)*2) - (MapSize - 1)
-
-						// fmt.Printf(" Adding food %d at %d,%d. ", g.World.MaxID, x, y)
-
-						g.addEntity(g.World.MaxID, ETypeFood, physics.Vect2{X: int32(x), Y: int32(y)}, int32(rand.Intn(500)-250))
-						g.commandHistory = append(g.commandHistory, GameMessage{
-							net:         g.World.Entities[g.World.MaxID].toMsg(),
-							mtype:       messages.EntityMsgType,
-							currentTick: g.World.CurrentTickID - 1,
-						})
-					}
-				}
+				// if len(g.Clients) > 0 || len(g.World.Entities) < 10000 {
+				// 	for i := 0; i < 1; i++ {
+				// 		g.World.MaxID++
+				// 		x := rand.Intn((MapSize-2)*2) - (MapSize - 1)
+				// 		y := rand.Intn((MapSize-2)*2) - (MapSize - 1)
+				//
+				// 		// fmt.Printf(" Adding food %d at %d,%d. ", g.World.MaxID, x, y)
+				//
+				// 		g.addEntity(g.World.MaxID, ETypeFood, physics.Vect2{X: int32(x), Y: int32(y)}, int32(rand.Intn(500)-250))
+				// 		g.commandHistory = append(g.commandHistory, GameMessage{
+				// 			net:         g.World.Entities[g.World.MaxID].toMsg(),
+				// 			mtype:       messages.EntityMsgType,
+				// 			currentTick: g.World.CurrentTickID - 1,
+				// 		})
+				// 	}
+				// }
 				// fmt.Printf("  RealTick: %d", g.World.RealTickID)
 			}
 			// fmt.Printf("\n")

@@ -35,8 +35,10 @@ public class ClientState : MonoBehaviour
     // Unity lifecycle methods
 	void Start()
 	{
+        Application.runInBackground = true;
+
         // Setup component and connect to network, send create/join messages!
-		this.latencyText = latencyTextContainer.GetComponent<Text>();
+        this.latencyText = latencyTextContainer.GetComponent<Text>();
 
         // TODO: allow handoff of network messenger from another scene?
         // Or do we pass the entire client state manager from scene to scene?
