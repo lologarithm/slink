@@ -10,6 +10,7 @@ public class ClientState : MonoBehaviour
     public GameObject headPrefab;
 	public GameObject segmentPrefab;
     public GameObject segnamePrefab;
+    public GameObject foodPrefab;
     public GameObject background;
 
 	public GameObject latencyTextContainer;
@@ -30,6 +31,8 @@ public class ClientState : MonoBehaviour
 
 	// Unity objects state
 	private Dictionary<uint, GameObject> segments = new Dictionary<uint, GameObject> ();
+    private Dictionary<uint, GameObject> foods = new Dictionary<uint, GameObject> ();
+    
 	private Text latencyText;
 
     // Unity lifecycle methods
@@ -213,6 +216,10 @@ public class ClientState : MonoBehaviour
                     this.game.players[sd.ID].turnDirection = sd.Direction;    
                 }
                 break;
+            case MsgType.Entity:
+                Entity spawn = ((Entity)parsedMsg);
+                this.game.entities[spawn.ID] = spawn;
+                break;
             case MsgType.GameConnected:
                 GameConnected gc = ((GameConnected)parsedMsg);
                 this.game = new GameInstance();
@@ -226,7 +233,7 @@ public class ClientState : MonoBehaviour
             case MsgType.GameMasterFrame:
                 GameMasterFrame gmf = ((GameMasterFrame)parsedMsg);
                 Debug.Log("Got master frame @ " + gmf.Tick);
-                this.game.entities.Clear();
+                // this.game.entities.Clear();
                 this.game.players.Clear();
                 this.loadEntities(gmf.Entities, gmf.Snakes);
                 this.game.MasterTick = gmf.Tick;
@@ -276,6 +283,27 @@ public class ClientState : MonoBehaviour
 
         if (this.game.LastTickUpdated >= this.game.Tick) {
             return false;
+        }
+        foreach (KeyValuePair<uint, Entity> entry in this.game.entities) {
+            var e = entry.Value;
+            if (e.EType == 3) // food
+            {
+                var vpp = this.mainCam.WorldToViewportPoint(new Vector3(e.X, e.Y, 0));
+                if (vpp.x > 1.1 || vpp.x < -0.1 || vpp.y < -0.1 || vpp.y > 1.0) {
+                    if (this.segments.ContainsKey(e.ID)) {
+                        Destroy(this.segments[e.ID]);
+                        this.segments.Remove(e.ID);
+                    }
+                    continue;
+                }
+
+                if (!this.foods.ContainsKey(entry.Key)) {
+                    GameObject newfood = (GameObject)Instantiate(this.foodPrefab, new Vector3(e.X, e.Y, 0), Quaternion.identity);
+                    newfood.name = "food" + e.ID.ToString();
+                    this.foods[e.ID] = newfood;
+                    this.updateEntityPos(e);
+                }
+            }
         }
 
         // Either a) create new snake at location or b) update existing snake based on speed.

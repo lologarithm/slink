@@ -239,28 +239,36 @@ func (g *GameSession) Run() {
 			// fmt.Printf("   Running Tick: %d", g.World.CurrentTickID)
 			// Advance 'real' state if the current state has caught up.
 			if g.World.CurrentTickID == g.World.RealTickID {
-				// Spawn food if players are around
-				// if len(g.Clients) > 0 || len(g.World.Entities) < 10000 {
-				// 	for i := 0; i < 1; i++ {
-				// 		g.World.MaxID++
-				// 		x := rand.Intn((MapSize-2)*2) - (MapSize - 1)
-				// 		y := rand.Intn((MapSize-2)*2) - (MapSize - 1)
-				//
-				// 		// fmt.Printf(" Adding food %d at %d,%d. ", g.World.MaxID, x, y)
-				//
-				// 		g.addEntity(g.World.MaxID, ETypeFood, physics.Vect2{X: int32(x), Y: int32(y)}, int32(rand.Intn(500)-250))
-				// 		g.commandHistory = append(g.commandHistory, GameMessage{
-				// 			net:         g.World.Entities[g.World.MaxID].toMsg(),
-				// 			mtype:       messages.EntityMsgType,
-				// 			currentTick: g.World.CurrentTickID - 1,
-				// 		})
-				// 	}
-				// }
+
+				if g.World.RealTickID%50 == 0 {
+					numspawn := 50
+					spawns := make([]*messages.Entity, numspawn)
+					// Spawn food if players are around
+					if len(g.Clients) > 0 || len(g.World.Entities) < 10000 {
+						for i := 0; i < numspawn; i++ {
+							g.World.MaxID++
+							x := rand.Intn((MapInternalSize)*2) - (MapInternalSize)
+							y := rand.Intn((MapInternalSize)*2) - (MapInternalSize)
+
+							// fmt.Printf(" Adding food %d at %d,%d. ", g.World.MaxID, x, y)
+
+							g.addEntity(g.World.MaxID, ETypeFood, physics.Vect2{X: int32(x), Y: int32(y)}, int32(rand.Intn(500)-250))
+							entMsg := g.World.Entities[g.World.MaxID].toMsg()
+							g.commandHistory = append(g.commandHistory, GameMessage{
+								net:         entMsg,
+								mtype:       messages.EntityMsgType,
+								currentTick: g.World.CurrentTickID - 1,
+							})
+							spawns[i] = entMsg
+						}
+						// fmt.Printf("Total entities: %d\n", len(g.World.Entities))
+					}
+					g.sendSpawns(spawns)
+				}
 				// fmt.Printf("  RealTick: %d", g.World.RealTickID)
-			}
-			// fmt.Printf("\n")
-			if g.World.RealTickID%100 == 0 { // every 10 seconds
-				g.SendMasterFrame()
+				if g.World.RealTickID%250 == 0 { // every 5 seconds
+					g.SendMasterFrame()
+				}
 			}
 		}
 
@@ -384,6 +392,23 @@ func (g *GameSession) sendToAll(msg OutgoingMessage) {
 	for _, c := range g.Clients {
 		msg.dest = c.Client
 		g.ToNetwork <- msg
+	}
+}
+
+// SendMasterFrame will create a 'master' state of all things and send to each client.
+func (g *GameSession) sendSpawns(spawns []*messages.Entity) {
+	for _, s := range spawns {
+		frame := messages.Frame{
+			MsgType:       messages.EntityMsgType,
+			Seq:           1,
+			ContentLength: uint16(s.Len()),
+		}
+		g.sendToAll(OutgoingMessage{
+			msg: messages.Packet{
+				Frame:  frame,
+				NetMsg: s,
+			},
+		})
 	}
 }
 

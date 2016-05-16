@@ -11,5 +11,10 @@ Server Manager that creates new games, connects users to games.
 
 Flow
 -------------
-1. connect to server
-2. start
+
+
+Features List
+--------------------------
+1. Add food
+2. Add minimap
+3. Add collisions

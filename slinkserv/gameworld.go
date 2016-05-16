@@ -9,7 +9,13 @@ import (
 )
 
 // MapSize is max size in any direction.
-const MapSize = 1000000
+const MapSize = 1010000
+
+// MapBorder is the edge of the map players can't enter.
+const MapBorder = 10000
+
+// MapInternalSize is the player usable area of the map.
+const MapInternalSize = MapSize - MapBorder
 
 // GameWorld represents all the data in the world.
 // Physical entities and the physics simulation.
@@ -73,7 +79,7 @@ func (gw *GameWorld) Clone() *GameWorld {
 				}
 			}
 			if !found {
-				log.Printf("Missing child: %d: %v", ent.ID, ent)
+				log.Printf("Missing child: %d: %v @(%v)", ent.ID, ent, ent.Bounds())
 				oldent := gw.Tree.Query(ent.Bounds())
 				if len(oldent) == 0 {
 					log.Printf("Not found in old tree either?")
@@ -160,15 +166,15 @@ func (gw *GameWorld) Tick() []Collision {
 			X: snake.Position.X + int32(float64(snake.Facing.X)*tickmv),
 			Y: snake.Position.Y + int32(float64(snake.Facing.Y)*tickmv),
 		}
-		if newpos.X > MapSize {
-			newpos.X = -MapSize
-		} else if newpos.X < -MapSize {
-			newpos.X = MapSize
+		if newpos.X > MapInternalSize {
+			newpos.X = -MapInternalSize
+		} else if newpos.X < -MapInternalSize {
+			newpos.X = MapInternalSize
 		}
-		if newpos.Y > MapSize {
-			newpos.Y = -MapSize
-		} else if newpos.Y < -MapSize {
-			newpos.Y = MapSize
+		if newpos.Y > MapInternalSize {
+			newpos.Y = -MapInternalSize
+		} else if newpos.Y < -MapInternalSize {
+			newpos.Y = MapInternalSize
 		}
 		oldBounds := snake.Entity.Bounds()
 		snake.Entity.Position = newpos
