@@ -56,9 +56,21 @@ func (g *GameSession) replayHistory(ticks uint32) {
 			}
 		}
 		// 2. call tick
-		g.World.Tick()
+		collisions := g.World.Tick()
 		if g.World.CurrentTickID > g.World.RealTickID {
 			g.World.RealTickID = g.World.CurrentTickID
+		}
+		for _, col := range collisions {
+			if col.Entity.EType == ETypeFood {
+				delete(g.World.Entities, col.Entity.ID)
+				found := g.World.Tree.Remove(col.Entity)
+				if !found {
+					log.Printf("Failed to remove food %d!?", col.Entity.ID)
+					panic("error removing snake from world.")
+				}
+
+				col.Snake.Size += (col.Entity.Size / 2)
+			}
 		}
 
 		// 3.
@@ -129,8 +141,8 @@ func (g *GameSession) resetToHistory(tick uint32) {
 }
 
 type Collision struct {
-	Entity1 *Entity
-	Entity2 *Entity
+	Snake  *Snake
+	Entity *Entity
 }
 
 // Run starts the game!
@@ -252,7 +264,7 @@ func (g *GameSession) Run() {
 
 							// fmt.Printf(" Adding food %d at %d,%d. ", g.World.MaxID, x, y)
 
-							g.addEntity(g.World.MaxID, ETypeFood, physics.Vect2{X: int32(x), Y: int32(y)}, int32(rand.Intn(500)-250))
+							g.addEntity(g.World.MaxID, ETypeFood, physics.Vect2{X: int32(x), Y: int32(y)}, int32(rand.Intn(50)+50))
 							entMsg := g.World.Entities[g.World.MaxID].toMsg()
 							g.commandHistory = append(g.commandHistory, GameMessage{
 								net:         entMsg,

@@ -205,13 +205,30 @@ func (gw *GameWorld) Tick() []Collision {
 		}
 	}
 
-	// TODO: calculate collisions!
+	collisions := []Collision{}
 	// 1. check quad tree for possible bounding box collisions
-	// 2. actually calculate exact distance and see if circles collide.
-	// The only collisions that matter are snake heads!
+	for _, s := range gw.Snakes {
+		treeColl := gw.Tree.Query(s.Bounds())
+		for _, c := range treeColl {
+			cent := c.(*Entity)
+			// 2. actually calculate exact distance and see if circles collide.
+			if cent.ID != s.ID && cent.Intersects(s.Entity) {
+				isvalid := true
+				for _, seg := range s.Segments {
+					if seg.ID == cent.ID {
+						isvalid = false
+						break
+					}
+				}
+				if !isvalid {
+					continue
+				}
 
-	// If head touches body, head dies
-	// If head touches head, bigger head wins.
+				collisions = append(collisions, Collision{Snake: s, Entity: cent})
+			}
+		}
+	}
+
 	gw.CurrentTickID++
-	return nil
+	return collisions
 }
