@@ -79,6 +79,14 @@ class TurnSnake {
  TickID uint32
 }
 
+class RemoveEntity {
+ Ent *Entity
+}
+
+class UpdateEntity {
+ Ent *Entity
+}
+
 class Vect2 {
  X int32
  Y int32

@@ -216,9 +216,24 @@ public class ClientState : MonoBehaviour
                     this.game.players[sd.ID].turnDirection = sd.Direction;    
                 }
                 break;
-            case MsgType.Entity:
-                Entity spawn = ((Entity)parsedMsg);
-                this.game.entities[spawn.ID] = spawn;
+            case MsgType.UpdateEntity:
+                Entity e = ((UpdateEntity)parsedMsg).Ent;
+                this.game.entities[e.ID] = e;
+                if (this.game.players.ContainsKey(e.ID)) {
+                    this.game.players[e.ID].size = e.Size;
+                    foreach (Entity seg in this.game.players[e.ID].segments) {
+                        seg.Size = e.Size;
+                    }
+                }
+                break;
+            case MsgType.RemoveEntity:
+                Entity re = ((RemoveEntity)parsedMsg).Ent;
+                // TODO: removal of snakes here?
+                if (this.foods.ContainsKey(re.ID)) {
+                    Destroy(this.foods[re.ID]);
+                    this.foods.Remove(re.ID);
+                }
+                this.game.entities.Remove(re.ID);
                 break;
             case MsgType.GameConnected:
                 GameConnected gc = ((GameConnected)parsedMsg);
@@ -273,6 +288,7 @@ public class ClientState : MonoBehaviour
             for (int j = 0; j < s.Segments.Length; j++)
             {
                 ps.segments[j+1] = this.game.entities[s.Segments[j]];
+                ps.segments[j+1].Size = ps.size;
             }
             this.game.players[s.ID] = ps;
         }
@@ -290,9 +306,9 @@ public class ClientState : MonoBehaviour
             {
                 var vpp = this.mainCam.WorldToViewportPoint(new Vector3(e.X, e.Y, 0));
                 if (vpp.x > 1.1 || vpp.x < -0.1 || vpp.y < -0.1 || vpp.y > 1.0) {
-                    if (this.segments.ContainsKey(e.ID)) {
-                        Destroy(this.segments[e.ID]);
-                        this.segments.Remove(e.ID);
+                    if (this.foods.ContainsKey(e.ID)) {
+                        Destroy(this.foods[e.ID]);
+                        this.foods.Remove(e.ID);
                     }
                     continue;
                 }
@@ -300,8 +316,9 @@ public class ClientState : MonoBehaviour
                 if (!this.foods.ContainsKey(entry.Key)) {
                     GameObject newfood = (GameObject)Instantiate(this.foodPrefab, new Vector3(e.X, e.Y, 0), Quaternion.identity);
                     newfood.name = "food" + e.ID.ToString();
+                    float scale = (float)(e.Size) / (float)256.0; // Image is 256x256.
+                    newfood.transform.localScale = new Vector3(scale, scale, 1);
                     this.foods[e.ID] = newfood;
-                    this.updateEntityPos(e);
                 }
             }
         }

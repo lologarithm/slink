@@ -7,7 +7,7 @@ interface INet {
 	void Deserialize(BinaryReader buffer);
 }
 
-enum MsgType : ushort {Unknown=0,Ack=1,Multipart=2,Heartbeat=3,Connected=4,Disconnected=5,CreateAcct=6,CreateAcctResp=7,Login=8,LoginResp=9,JoinGame=10,GameConnected=11,GameMasterFrame=12,Entity=13,Snake=14,TurnSnake=15,Vect2=16}
+enum MsgType : ushort {Unknown=0,Ack=1,Multipart=2,Heartbeat=3,Connected=4,Disconnected=5,CreateAcct=6,CreateAcctResp=7,Login=8,LoginResp=9,JoinGame=10,GameConnected=11,GameMasterFrame=12,Entity=13,Snake=14,TurnSnake=15,RemoveEntity=16,UpdateEntity=17,Vect2=18}
 
 static class Messages {
 // ParseNetMessage accepts input of raw bytes from a NetMessage. Parses and returns a Net message.
@@ -57,6 +57,12 @@ public static INet Parse(ushort msgType, byte[] content) {
 			break;
 		case MsgType.TurnSnake:
 			msg = new TurnSnake();
+			break;
+		case MsgType.RemoveEntity:
+			msg = new RemoveEntity();
+			break;
+		case MsgType.UpdateEntity:
+			msg = new UpdateEntity();
 			break;
 		case MsgType.Vect2:
 			msg = new Vect2();
@@ -373,6 +379,32 @@ public class TurnSnake : INet {
 		this.ID = buffer.ReadUInt32();
 		this.Direction = buffer.ReadInt16();
 		this.TickID = buffer.ReadUInt32();
+	}
+}
+
+public class RemoveEntity : INet {
+	public Entity Ent;
+
+	public void Serialize(BinaryWriter buffer) {
+		this.Ent.Serialize(buffer);
+	}
+
+	public void Deserialize(BinaryReader buffer) {
+		this.Ent = new Entity();
+		this.Ent.Deserialize(buffer);
+	}
+}
+
+public class UpdateEntity : INet {
+	public Entity Ent;
+
+	public void Serialize(BinaryWriter buffer) {
+		this.Ent.Serialize(buffer);
+	}
+
+	public void Deserialize(BinaryReader buffer) {
+		this.Ent = new Entity();
+		this.Ent.Deserialize(buffer);
 	}
 }
 

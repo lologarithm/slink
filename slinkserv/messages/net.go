@@ -31,6 +31,8 @@ const (
 	EntityMsgType
 	SnakeMsgType
 	TurnSnakeMsgType
+	RemoveEntityMsgType
+	UpdateEntityMsgType
 	Vect2MsgType
 )
 
@@ -66,6 +68,10 @@ func ParseNetMessage(packet Packet, content []byte) Net {
 		msg = &Snake{}
 	case TurnSnakeMsgType:
 		msg = &TurnSnake{}
+	case RemoveEntityMsgType:
+		msg = &RemoveEntity{}
+	case UpdateEntityMsgType:
+		msg = &UpdateEntity{}
 	case Vect2MsgType:
 		msg = &Vect2{}
 	default:
@@ -532,6 +538,44 @@ func (m *TurnSnake) Len() int {
 	mylen += 4
 	mylen += 2
 	mylen += 4
+	return mylen
+}
+
+type RemoveEntity struct {
+	Ent *Entity
+}
+
+func (m *RemoveEntity) Serialize(buffer *bytes.Buffer) {
+	m.Ent.Serialize(buffer)
+}
+
+func (m *RemoveEntity) Deserialize(buffer *bytes.Buffer) {
+	m.Ent = new(Entity)
+	m.Ent.Deserialize(buffer)
+}
+
+func (m *RemoveEntity) Len() int {
+	mylen := 0
+	mylen += m.Ent.Len()
+	return mylen
+}
+
+type UpdateEntity struct {
+	Ent *Entity
+}
+
+func (m *UpdateEntity) Serialize(buffer *bytes.Buffer) {
+	m.Ent.Serialize(buffer)
+}
+
+func (m *UpdateEntity) Deserialize(buffer *bytes.Buffer) {
+	m.Ent = new(Entity)
+	m.Ent.Deserialize(buffer)
+}
+
+func (m *UpdateEntity) Len() int {
+	mylen := 0
+	mylen += m.Ent.Len()
 	return mylen
 }
 

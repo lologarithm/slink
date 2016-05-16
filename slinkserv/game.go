@@ -68,8 +68,12 @@ func (g *GameSession) replayHistory(ticks uint32) {
 					log.Printf("Failed to remove food %d!?", col.Entity.ID)
 					panic("error removing snake from world.")
 				}
-
 				col.Snake.Size += (col.Entity.Size / 2)
+				for _, seg := range col.Snake.Segments {
+					seg.Size = col.Snake.Size
+				}
+				fmt.Printf("Snake %d ate a food, size is now: %d", col.Snake.ID, col.Snake.Size)
+				g.sendEat(col.Snake, col.Entity)
 			}
 		}
 
@@ -253,16 +257,14 @@ func (g *GameSession) Run() {
 			if g.World.CurrentTickID == g.World.RealTickID {
 
 				if g.World.RealTickID%50 == 0 {
-					numspawn := 50
-					spawns := make([]*messages.Entity, numspawn)
+					numspawn := 100
+					spawns := make([]*messages.UpdateEntity, numspawn)
 					// Spawn food if players are around
-					if len(g.Clients) > 0 || len(g.World.Entities) < 10000 {
+					if len(g.Clients) > 0 || len(g.World.Entities) < 100000 {
 						for i := 0; i < numspawn; i++ {
 							g.World.MaxID++
 							x := rand.Intn((MapInternalSize)*2) - (MapInternalSize)
 							y := rand.Intn((MapInternalSize)*2) - (MapInternalSize)
-
-							// fmt.Printf(" Adding food %d at %d,%d. ", g.World.MaxID, x, y)
 
 							g.addEntity(g.World.MaxID, ETypeFood, physics.Vect2{X: int32(x), Y: int32(y)}, int32(rand.Intn(50)+50))
 							entMsg := g.World.Entities[g.World.MaxID].toMsg()
@@ -271,11 +273,13 @@ func (g *GameSession) Run() {
 								mtype:       messages.EntityMsgType,
 								currentTick: g.World.CurrentTickID - 1,
 							})
-							spawns[i] = entMsg
+							spawns[i] = &messages.UpdateEntity{Ent: entMsg}
 						}
 						// fmt.Printf("Total entities: %d\n", len(g.World.Entities))
 					}
-					g.sendSpawns(spawns)
+					if spawns[0] != nil { // Only send spawn messages if we are spawning.
+						g.sendSpawns(spawns)
+					}
 				}
 				// fmt.Printf("  RealTick: %d", g.World.RealTickID)
 				if g.World.RealTickID%250 == 0 { // every 5 seconds
@@ -407,11 +411,44 @@ func (g *GameSession) sendToAll(msg OutgoingMessage) {
 	}
 }
 
-// SendMasterFrame will create a 'master' state of all things and send to each client.
-func (g *GameSession) sendSpawns(spawns []*messages.Entity) {
+func (g *GameSession) sendEat(snake *Snake, food *Entity) {
+	removeFood := &messages.RemoveEntity{
+		Ent: food.toMsg(),
+	}
+	frame := messages.Frame{
+		MsgType:       messages.RemoveEntityMsgType,
+		Seq:           1,
+		ContentLength: uint16(removeFood.Len()),
+	}
+	g.sendToAll(OutgoingMessage{
+		msg: messages.Packet{
+			Frame:  frame,
+			NetMsg: removeFood,
+		},
+	})
+
+	upSnake := &messages.UpdateEntity{
+		Ent: snake.Entity.toMsg(),
+	}
+	frame = messages.Frame{
+		MsgType:       messages.UpdateEntityMsgType,
+		Seq:           1,
+		ContentLength: uint16(upSnake.Len()),
+	}
+	g.sendToAll(OutgoingMessage{
+		msg: messages.Packet{
+			Frame:  frame,
+			NetMsg: upSnake,
+		},
+	})
+
+}
+
+// sendSpawns
+func (g *GameSession) sendSpawns(spawns []*messages.UpdateEntity) {
 	for _, s := range spawns {
 		frame := messages.Frame{
-			MsgType:       messages.EntityMsgType,
+			MsgType:       messages.UpdateEntityMsgType,
 			Seq:           1,
 			ContentLength: uint16(s.Len()),
 		}
