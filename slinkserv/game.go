@@ -69,6 +69,21 @@ func (g *GameSession) replayHistory(ticks uint32) {
 					panic("error removing snake from world.")
 				}
 				col.Snake.Size += (col.Entity.Size / 2)
+				numsegs := int32(len(col.Snake.Segments))
+				for (col.Snake.Size / 30) > numsegs {
+					g.World.MaxID++
+					e := &Entity{
+						ID:       g.World.MaxID,
+						EType:    ETypeSegment,
+						Position: col.Snake.Segments[numsegs-1].Position,
+						Facing:   col.Snake.Segments[numsegs-1].Facing,
+						Size:     col.Snake.Size,
+					}
+					col.Snake.Segments = append(col.Snake.Segments, e)
+					g.World.Entities[g.World.MaxID] = e
+					g.World.Tree.Add(e)
+					numsegs = int32(len(col.Snake.Segments))
+				}
 				for _, seg := range col.Snake.Segments {
 					seg.Size = col.Snake.Size
 				}
@@ -116,30 +131,27 @@ func (g *GameSession) createHistoryPoint() {
 
 func (g *GameSession) resetToHistory(tick uint32) {
 	// log.Printf("    Resetting from: %d to %d", g.World.CurrentTickID, tick)
-	ticklag := g.World.CurrentTickID - tick
-	if ticklag > 50 {
-		ticklag = 50
-	} else if ticklag < 0 {
-		ticklag = 0
-	}
+
 	// Reset world back a bit.
-	if ticklag > 0 {
-		if g.World.CurrentTickID < ticklag {
-			ticklag = g.World.CurrentTickID
+	if tick < g.World.CurrentTickID {
+		prevWorldIdx := g.prevHead
+		for i := 0; i < historySize; i++ {
+			if prevWorldIdx == 0 {
+				prevWorldIdx = historySize - 1
+			} else {
+				prevWorldIdx--
+			}
+			if g.prevWorlds[prevWorldIdx].CurrentTickID < tick {
+				break
+			}
 		}
-		histTicks := ticklag / histTime
-		prevWorldIdx := g.prevHead - histTicks
-		if histTicks > g.prevHead {
-			prevWorldIdx = historySize - (histTicks - g.prevHead)
-		}
+
 		realtick := g.World.RealTickID
 		maxid := g.World.MaxID
-
 		g.World = g.prevWorlds[prevWorldIdx].Clone()
 		g.World.RealTickID = realtick // Make sure to preserve what tick it really is.
 		g.World.MaxID = maxid
-
-		g.prevHead = g.prevHead
+		g.prevHead = prevWorldIdx
 		// log.Printf("    World is now at tick: %d", g.World.CurrentTickID)
 	}
 }

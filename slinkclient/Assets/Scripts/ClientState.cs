@@ -74,27 +74,33 @@ public class ClientState : MonoBehaviour
 		{
 			return;
 		}
-        if (this.updateGame()) // Only allow dir changes on ticks.
-        {
-            if (!this.game.entities.ContainsKey(this.mySnake)) {
-                return;
-            }
-            short currentTurn = this.game.players[this.mySnake].turnDirection;
-            short newTurn = 0;
-            if (Input.GetKey(KeyCode.A) || Input.GetKey(KeyCode.LeftArrow))
-            {
-                newTurn--;
-            }
-            if (Input.GetKey(KeyCode.D) || Input.GetKey(KeyCode.RightArrow))
-            {
-                newTurn++;
-            }
-            
-            if (currentTurn != newTurn) {
-                this.game.players[this.mySnake].turnDirection = newTurn;
-                this.SetDirection(newTurn);
-            }
+        
+        this.game.UpdateTick();
+
+        if (this.game.LastTickUpdated >= this.game.Tick) {
+            return;
         }
+
+        if (!this.game.entities.ContainsKey(this.mySnake)) {
+            return;
+        }
+        short currentTurn = this.game.players[this.mySnake].turnDirection;
+        short newTurn = 0;
+        if (Input.GetKey(KeyCode.A) || Input.GetKey(KeyCode.LeftArrow))
+        {
+            newTurn--;
+        }
+        if (Input.GetKey(KeyCode.D) || Input.GetKey(KeyCode.RightArrow))
+        {
+            newTurn++;
+        }
+        
+        if (currentTurn != newTurn) {
+            this.game.players[this.mySnake].turnDirection = newTurn;
+            this.SetDirection(newTurn);
+        }
+        
+        this.updateGame();
 	}
 
 	void OnApplicationQuit()
@@ -132,10 +138,10 @@ public class ClientState : MonoBehaviour
 	}
 
     public void SetDirection(short turn) {
-        //Debug.Log("Sending facing at tick " + this.game.Tick + ", " + turn);
+        // Debug.Log("Sending facing at tick " + (this.game.Tick-1) + ", " + turn);
         TurnSnake dir_msg = new TurnSnake();
         dir_msg.ID = this.mySnake;
-        dir_msg.TickID = this.game.Tick+1;
+        dir_msg.TickID = this.game.Tick-1;
         dir_msg.Direction = turn;
         this.net.sendNetPacket(MsgType.TurnSnake, dir_msg);
     }
@@ -220,6 +226,7 @@ public class ClientState : MonoBehaviour
                 Entity e = ((UpdateEntity)parsedMsg).Ent;
                 this.game.entities[e.ID] = e;
                 if (this.game.players.ContainsKey(e.ID)) {
+                    Debug.Log("Updating player snake: " + e.ID);
                     this.game.players[e.ID].size = e.Size;
                     foreach (Entity seg in this.game.players[e.ID].segments) {
                         seg.Size = e.Size;
@@ -228,8 +235,11 @@ public class ClientState : MonoBehaviour
                 break;
             case MsgType.RemoveEntity:
                 Entity re = ((RemoveEntity)parsedMsg).Ent;
+                                Debug.Log("Removing entity: " + re.ID);
+
                 // TODO: removal of snakes here?
                 if (this.foods.ContainsKey(re.ID)) {
+                    Debug.Log("Removing food renderer:", this.foods[re.ID]);                    
                     Destroy(this.foods[re.ID]);
                     this.foods.Remove(re.ID);
                 }
@@ -243,7 +253,9 @@ public class ClientState : MonoBehaviour
                 this.game.StartTime = DateTime.Now - new TimeSpan((Int64)this.latencyms * 10000);
                 this.game.StartTick = gc.TickID;
                 this.game.Tick = gc.TickID;
+                this.game.LastTickUpdated = gc.TickID;
                 this.mySnake = gc.SnakeID;
+                Debug.Log("Connected to game, start tick " + this.game.StartTick + ", current tick: " + this.game.Tick + " Start Time: " + this.game.StartTime.ToString());
 				break;
             case MsgType.GameMasterFrame:
                 GameMasterFrame gmf = ((GameMasterFrame)parsedMsg);
@@ -274,7 +286,6 @@ public class ClientState : MonoBehaviour
         foreach (Entity e in ents) {
             this.game.entities[e.ID] = e;
         }
-        Debug.Log("Num snakes in master: " + snakes.Length);
         foreach (Snake s in snakes) {
             Entity head = this.game.entities[s.ID];
             PlayerSnake ps = new PlayerSnake();
@@ -294,12 +305,7 @@ public class ClientState : MonoBehaviour
         }
     }
 
-    private bool updateGame() {
-        this.game.UpdateTick();
-
-        if (this.game.LastTickUpdated >= this.game.Tick) {
-            return false;
-        }
+    private bool updateGame() {        
         foreach (KeyValuePair<uint, Entity> entry in this.game.entities) {
             var e = entry.Value;
             if (e.EType == 3) // food
@@ -316,7 +322,7 @@ public class ClientState : MonoBehaviour
                 if (!this.foods.ContainsKey(entry.Key)) {
                     GameObject newfood = (GameObject)Instantiate(this.foodPrefab, new Vector3(e.X, e.Y, 0), Quaternion.identity);
                     newfood.name = "food" + e.ID.ToString();
-                    float scale = (float)(e.Size) / (float)256.0; // Image is 256x256.
+                    float scale = (float)(e.Size*3) / (float)256.0; // food needs to be bigger! Image is 256x256.
                     newfood.transform.localScale = new Vector3(scale, scale, 1);
                     this.foods[e.ID] = newfood;
                 }
@@ -430,8 +436,9 @@ public class PlayerSnake
             float turn = GameConstants.TurningSpeed * this.turnDirection * nticks;
 
             var newface = VectorUtils.RotateVect2(VectorUtils.NetworkToGameVect2(this.segments[0].Facing), turn);
-            newface = newface.normalized * 100;
+            newface = newface.normalized*100;
             this.segments[0].Facing = VectorUtils.GameToNetworkVect2(newface);
+            // Debug.Log("Tick: " + (currentTick-1) + " Facing: " + newface.ToString());
         }
         
         int snakeDist = this.size / 3;
@@ -440,6 +447,7 @@ public class PlayerSnake
         this.segments[0].X += (int)(((double)this.segments[0].Facing.X) * dist);
         this.segments[0].Y += (int)(((double)this.segments[0].Facing.Y) * dist);
 
+        // Debug.Log("Tick " + (currentTick-1) + "(advanced " + nticks+ " ticks), Snake1 pos:" + this.segments[0].X+","+this.segments[0].Y);
         Vector2 prevPos = new Vector2(this.segments[0].X, this.segments[0].Y);
         foreach (Entity seg in this.segments)
         {

@@ -182,6 +182,7 @@ func (gw *GameWorld) Tick() []Collision {
 		if move != 2 {
 			panic("move of snake head failed")
 		}
+		// fmt.Printf("Tick: %d, Snake Pos: %v\n", gw.CurrentTickID, newpos)
 
 		for _, seg := range snake.Segments {
 			movevect := physics.SubVect2(newpos, seg.Position)
