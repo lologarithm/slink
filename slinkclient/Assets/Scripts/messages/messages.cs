@@ -7,7 +7,7 @@ interface INet {
 	void Deserialize(BinaryReader buffer);
 }
 
-enum MsgType : ushort {Unknown=0,Ack=1,Multipart=2,Heartbeat=3,Connected=4,Disconnected=5,CreateAcct=6,CreateAcctResp=7,Login=8,LoginResp=9,JoinGame=10,GameConnected=11,GameMasterFrame=12,Entity=13,Snake=14,TurnSnake=15,RemoveEntity=16,UpdateEntity=17,SnakeDied=18,Vect2=19}
+enum MsgType : ushort {Unknown=0,Ack=1,Multipart=2,Heartbeat=3,Connected=4,Disconnected=5,CreateAcct=6,CreateAcctResp=7,Login=8,LoginResp=9,JoinGame=10,GameConnected=11,GameMasterFrame=12,Entity=13,Snake=14,TurnSnake=15,RemoveEntity=16,UpdateEntity=17,SnakeDied=18,Vect2=19,A=20}
 
 static class Messages {
 // ParseNetMessage accepts input of raw bytes from a NetMessage. Parses and returns a Net message.
@@ -69,6 +69,9 @@ public static INet Parse(ushort msgType, byte[] content) {
 			break;
 		case MsgType.Vect2:
 			msg = new Vect2();
+			break;
+		case MsgType.A:
+			msg = new A();
 			break;
 	}
 	MemoryStream ms = new MemoryStream(content);
@@ -435,6 +438,39 @@ public class Vect2 : INet {
 	public void Deserialize(BinaryReader buffer) {
 		this.X = buffer.ReadInt32();
 		this.Y = buffer.ReadInt32();
+	}
+}
+
+public class A : INet {
+	public string Name;
+	public long BirthDay;
+	public string Phone;
+	public int Siblings;
+	public byte Spouse;
+	public double Money;
+
+	public void Serialize(BinaryWriter buffer) {
+		buffer.Write((Int32)this.Name.Length);
+		buffer.Write(System.Text.Encoding.UTF8.GetBytes(this.Name));
+		buffer.Write(this.BirthDay);
+		buffer.Write((Int32)this.Phone.Length);
+		buffer.Write(System.Text.Encoding.UTF8.GetBytes(this.Phone));
+		buffer.Write(this.Siblings);
+		buffer.Write(this.Spouse);
+		buffer.Write(this.Money);
+	}
+
+	public void Deserialize(BinaryReader buffer) {
+		int l0_1 = buffer.ReadInt32();
+		byte[] temp0_1 = buffer.ReadBytes(l0_1);
+		this.Name = System.Text.Encoding.UTF8.GetString(temp0_1);
+		this.BirthDay = buffer.ReadInt64();
+		int l2_1 = buffer.ReadInt32();
+		byte[] temp2_1 = buffer.ReadBytes(l2_1);
+		this.Phone = System.Text.Encoding.UTF8.GetString(temp2_1);
+		this.Siblings = buffer.ReadInt32();
+		this.Spouse = buffer.ReadByte();
+		this.Money = buffer.ReadDouble();
 	}
 }
 

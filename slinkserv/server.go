@@ -148,7 +148,7 @@ func NewServer(exit chan int) Server {
 	return s
 }
 
-func RunServer(s Server, exit chan int) {
+func RunServer(s Server, exit chan int, complete chan int) {
 	go s.sendMessages()
 	fmt.Println("Server Started!")
 
@@ -165,6 +165,7 @@ func RunServer(s Server, exit chan int) {
 			s.handleMessage()
 		}
 	}
+	complete <- 1
 }
 
 type OutgoingMessage struct {

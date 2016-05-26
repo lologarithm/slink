@@ -8,9 +8,9 @@ import (
 
 func WriteGo(messages []Message, messageMap map[string]Message) {
 	gobuf := &bytes.Buffer{}
-	gobuf.WriteString("package messages\n\nimport (\n\t\"bytes\"\n\t\"encoding/binary\"\n\t\"log\"\n)\n\n")
+	gobuf.WriteString("package messages\n\nimport (\n\t\"encoding/binary\"\n\t\"log\"\n\t\"math\"\n)\n\n")
 	// 1. List type values!
-	gobuf.WriteString("type Net interface {\n\tSerialize(*bytes.Buffer)\n\tDeserialize(*bytes.Buffer)\n\tLen() int\n}\n\n")
+	gobuf.WriteString("type Net interface {\n\tSerialize([]byte)\n\tDeserialize([]byte)\n\tLen() int\n}\n\n")
 	gobuf.WriteString("type MessageType uint16\n\n")
 	gobuf.WriteString("const (\n\tUnknownMsgType MessageType = iota\n\tAckMsgType\n")
 	for _, t := range messages {
@@ -33,7 +33,7 @@ func WriteGo(messages []Message, messageMap map[string]Message) {
 		gobuf.WriteString(t.Name)
 		gobuf.WriteString("{}\n")
 	}
-	gobuf.WriteString("\tdefault:\n\t\tlog.Printf(\"Unknown message type: %d\", packet.Frame.MsgType)\n\t\treturn nil\n\t}\n\tmsg.Deserialize(bytes.NewBuffer(content))\n\treturn msg\n}\n\n")
+	gobuf.WriteString("\tdefault:\n\t\tlog.Printf(\"Unknown message type: %d\", packet.Frame.MsgType)\n\t\treturn nil\n\t}\n\tmsg.Deserialize(content)\n\treturn msg\n}\n\n")
 
 	// 2. Generate go classes
 	for _, msg := range messages {
@@ -49,19 +49,21 @@ func WriteGo(messages []Message, messageMap map[string]Message) {
 		gobuf.WriteString("\n}\n\n")
 		gobuf.WriteString("func (m *")
 		gobuf.WriteString(msg.Name)
-		gobuf.WriteString(") Serialize(buffer *bytes.Buffer) {\n")
+		gobuf.WriteString(") Serialize(buffer []byte) {\n\tidx := 0\n")
 		for _, f := range msg.Fields {
 			WriteGoSerialize(f, 1, gobuf, messageMap)
 		}
-		gobuf.WriteString("}\n\n")
+		// cause im lazy
+		gobuf.WriteString("\n\t_ = idx\n}\n\n")
 
 		gobuf.WriteString("func (m *")
 		gobuf.WriteString(msg.Name)
-		gobuf.WriteString(") Deserialize(buffer *bytes.Buffer) {\n")
+		gobuf.WriteString(") Deserialize(buffer []byte) {\n\tidx := 0\n")
 		for _, f := range msg.Fields {
 			WriteGoDeserial(f, 1, gobuf, messageMap)
 		}
-		gobuf.WriteString("}\n\n")
+		// cause im lazy.
+		gobuf.WriteString("\n\t_ = idx\n}\n\n")
 
 		gobuf.WriteString("func (m *")
 		gobuf.WriteString(msg.Name)
@@ -92,7 +94,7 @@ func WriteGoLen(f MessageField, scopeDepth int, buf *bytes.Buffer, messages map[
 		buf.WriteString("mylen += 2")
 	case "uint32", "int32":
 		buf.WriteString("mylen += 4")
-	case "uint64", "int64":
+	case "uint64", "int64", "float64":
 		buf.WriteString("mylen += 8")
 	case "string":
 		buf.WriteString("mylen += 4 + len(")
@@ -133,70 +135,115 @@ func WriteGoLen(f MessageField, scopeDepth int, buf *bytes.Buffer, messages map[
 	buf.WriteString("\n")
 }
 
+func writeArrayLen(f MessageField, scopeDepth int, buf *bytes.Buffer) {
+	buf.WriteString("binary.LittleEndian.PutUint32(buffer[idx:], uint32(len(")
+	if scopeDepth == 1 {
+		buf.WriteString("m.")
+	}
+	buf.WriteString(f.Name)
+	buf.WriteString(")))\n")
+	for i := 0; i < scopeDepth; i++ {
+		buf.WriteString("\t")
+	}
+	buf.WriteString("idx += 4\n")
+	for i := 0; i < scopeDepth; i++ {
+		buf.WriteString("\t")
+	}
+}
+
+func writeIdxInc(f MessageField, scopeDepth int, buf *bytes.Buffer) {
+	buf.WriteString("\n")
+	for i := 0; i < scopeDepth; i++ {
+		buf.WriteString("\t")
+	}
+	buf.WriteString("idx+=")
+	switch f.Type {
+	case "byte":
+		buf.WriteString("1")
+	case "int16", "uint16":
+		buf.WriteString("2")
+	case "int32", "uint32":
+		buf.WriteString("4")
+	case "int64", "uint64", "float64":
+		buf.WriteString("8")
+	default:
+		// Array probably
+		buf.WriteString("len(")
+		if scopeDepth == 1 {
+			buf.WriteString("m.")
+		}
+		buf.WriteString(f.Name)
+		buf.WriteString(")")
+	}
+	buf.WriteString("\n")
+}
+
 func WriteGoSerialize(f MessageField, scopeDepth int, buf *bytes.Buffer, messages map[string]Message) {
 	for i := 0; i < scopeDepth; i++ {
 		buf.WriteString("\t")
 	}
 	switch f.Type {
 	case "[]byte":
-		buf.WriteString("binary.Write(buffer, binary.LittleEndian, int32(len(")
+		writeArrayLen(f, scopeDepth, buf)
+		buf.WriteString("copy(buffer[idx:], ")
 		if scopeDepth == 1 {
 			buf.WriteString("m.")
 		}
 		buf.WriteString(f.Name)
-		buf.WriteString(")))\n")
-		for i := 0; i < scopeDepth; i++ {
-			buf.WriteString("\t")
-		}
-		buf.WriteString("buffer.Write(")
-		if scopeDepth == 1 {
-			buf.WriteString("m.")
-		}
-		buf.WriteString(f.Name)
-		buf.WriteString(")\n")
+		buf.WriteString(")")
+		writeIdxInc(f, scopeDepth, buf)
 	case "byte":
-		buf.WriteString("buffer.WriteByte(")
+		buf.WriteString("buffer[idx] = ")
 		if scopeDepth == 1 {
 			buf.WriteString("m.")
 		}
 		buf.WriteString(f.Name)
-		buf.WriteString(")\n")
-	case "int16", "int32", "uint16", "uint32", "int64", "uint64":
-		buf.WriteString("binary.Write(buffer, binary.LittleEndian, ")
+		writeIdxInc(f, scopeDepth, buf)
+	case "int16", "uint16":
+		buf.WriteString("binary.LittleEndian.PutUint16(buffer[idx:], uint16(")
 		if scopeDepth == 1 {
 			buf.WriteString("m.")
 		}
 		buf.WriteString(f.Name)
-		buf.WriteString(")\n")
+		buf.WriteString("))")
+		writeIdxInc(f, scopeDepth, buf)
+	case "int32", "uint32":
+		buf.WriteString("binary.LittleEndian.PutUint32(buffer[idx:], uint32(")
+		if scopeDepth == 1 {
+			buf.WriteString("m.")
+		}
+		buf.WriteString(f.Name)
+		buf.WriteString("))")
+		writeIdxInc(f, scopeDepth, buf)
+	case "int64", "uint64":
+		buf.WriteString("binary.LittleEndian.PutUint64(buffer[idx:], uint64(")
+		if scopeDepth == 1 {
+			buf.WriteString("m.")
+		}
+		buf.WriteString(f.Name)
+		buf.WriteString("))")
+		writeIdxInc(f, scopeDepth, buf)
+	case "float64":
+		buf.WriteString("binary.LittleEndian.PutUint64(buffer[idx:], math.Float64bits(")
+		if scopeDepth == 1 {
+			buf.WriteString("m.")
+		}
+		buf.WriteString(f.Name)
+		buf.WriteString("))")
+		writeIdxInc(f, scopeDepth, buf)
 	case "string":
-		buf.WriteString("binary.Write(buffer, binary.LittleEndian, int32(len(")
+		writeArrayLen(f, scopeDepth, buf)
+		buf.WriteString("copy(buffer[idx:], []byte(")
 		if scopeDepth == 1 {
 			buf.WriteString("m.")
 		}
 		buf.WriteString(f.Name)
-		buf.WriteString(")))\n")
-		for i := 0; i < scopeDepth; i++ {
-			buf.WriteString("\t")
-		}
-		buf.WriteString("buffer.WriteString(")
-		if scopeDepth == 1 {
-			buf.WriteString("m.")
-		}
-		buf.WriteString(f.Name)
-		buf.WriteString(")\n")
+		buf.WriteString("))")
+		writeIdxInc(f, scopeDepth, buf)
 	default:
 		if f.Type[:2] == "[]" {
 			// Array!
-			buf.WriteString("binary.Write(buffer, binary.LittleEndian, int32(len(")
-			if scopeDepth == 1 {
-				buf.WriteString("m.")
-			}
-
-			buf.WriteString(f.Name)
-			buf.WriteString(")))\n")
-			for i := 0; i < scopeDepth; i++ {
-				buf.WriteString("\t")
-			}
+			writeArrayLen(f, scopeDepth, buf)
 			fn := "v" + strconv.Itoa(scopeDepth+1)
 			buf.WriteString("for _, ")
 			buf.WriteString(fn)
@@ -217,8 +264,43 @@ func WriteGoSerialize(f MessageField, scopeDepth int, buf *bytes.Buffer, message
 				buf.WriteString("m.")
 			}
 			buf.WriteString(f.Name)
-			buf.WriteString(".Serialize(buffer)\n")
+			buf.WriteString(".Serialize(buffer[idx:])\n")
+			for i := 0; i < scopeDepth; i++ {
+				buf.WriteString("\t")
+			}
+			buf.WriteString("idx+=")
+			if scopeDepth == 1 {
+				buf.WriteString("m.")
+			}
+			buf.WriteString(f.Name)
+			buf.WriteString(".Len()\n")
 		}
+	}
+}
+
+func writeNumericDeserialFunc(f MessageField, scopeDepth int, buf *bytes.Buffer) {
+	buf.WriteString("binary.LittleEndian.")
+	switch f.Type {
+	case "int16", "uint16":
+		buf.WriteString("Uint16(")
+	case "int32", "uint32":
+		buf.WriteString("Uint32(")
+	case "int64", "uint64", "float64":
+		buf.WriteString("Uint64(")
+	}
+	buf.WriteString("buffer[idx:]")
+	buf.WriteString(")")
+}
+
+func writeArrayLenRead(lname string, scopeDepth int, buf *bytes.Buffer) {
+	buf.WriteString(lname)
+	buf.WriteString(" := int(binary.LittleEndian.Uint32(buffer[idx:]))\n")
+	for i := 0; i < scopeDepth; i++ {
+		buf.WriteString("\t")
+	}
+	buf.WriteString("idx += 4\n")
+	for i := 0; i < scopeDepth; i++ {
+		buf.WriteString("\t")
 	}
 }
 
@@ -232,67 +314,48 @@ func WriteGoDeserial(f MessageField, scopeDepth int, buf *bytes.Buffer, messages
 			buf.WriteString("m.")
 		}
 		buf.WriteString(f.Name)
-		buf.WriteString(", _ = buffer.ReadByte()\n")
-	case "int16", "int32", "int64", "uint16", "uint32", "uint64":
-		buf.WriteString("binary.Read(buffer, binary.LittleEndian, &")
+		buf.WriteString(" = buffer[idx]\n")
+		writeIdxInc(f, scopeDepth, buf)
+	case "int16", "int32", "int64", "uint16", "uint32", "uint64", "float64":
 		if scopeDepth == 1 {
 			buf.WriteString("m.")
 		}
 		buf.WriteString(f.Name)
-		buf.WriteString(")\n")
+		buf.WriteString(" = ")
+		switch f.Type {
+		case "int16":
+			buf.WriteString("int16(")
+		case "int32":
+			buf.WriteString("int32(")
+		case "int64":
+			buf.WriteString("int64(")
+		case "float64":
+			buf.WriteString("math.Float64frombits(")
+		}
+		writeNumericDeserialFunc(f, scopeDepth, buf)
+		if f.Type[0] == 'i' || f.Type[0] == 'f' {
+			buf.WriteString(")")
+		}
+		writeIdxInc(f, scopeDepth, buf)
 	case "string":
+		// Get length of string first
 		lname := "l" + strconv.Itoa(f.Order) + "_" + strconv.Itoa(scopeDepth)
-		buf.WriteString("var ")
-		buf.WriteString(lname)
-		buf.WriteString(" int32\n")
-		for i := 0; i < scopeDepth; i++ {
-			buf.WriteString("\t")
-		}
-		buf.WriteString("binary.Read(buffer, binary.LittleEndian, &")
-		buf.WriteString(lname)
-		buf.WriteString(")\n")
-		for i := 0; i < scopeDepth; i++ {
-			buf.WriteString("\t")
-		}
-		tmpname := "temp" + strconv.Itoa(f.Order) + "_" + strconv.Itoa(scopeDepth)
-		buf.WriteString(tmpname)
-		buf.WriteString(" := make([]byte, ")
-		buf.WriteString(lname)
-		buf.WriteString(")\n")
-		for i := 0; i < scopeDepth; i++ {
-			buf.WriteString("\t")
-		}
-		buf.WriteString("buffer.Read(")
-		buf.WriteString(tmpname)
-		buf.WriteString(")\n")
-		for i := 0; i < scopeDepth; i++ {
-			buf.WriteString("\t")
-		}
+		writeArrayLenRead(lname, scopeDepth, buf)
 		if scopeDepth == 1 {
 			buf.WriteString("m.")
 		}
 		buf.WriteString(f.Name)
-		buf.WriteString(" = string(")
-		buf.WriteString(tmpname)
-		buf.WriteString(")\n")
+		buf.WriteString(" = string(buffer[idx:idx+")
+		buf.WriteString(lname)
+		buf.WriteString("])")
+		writeIdxInc(f, scopeDepth, buf)
 	default:
 		if f.Type[:2] == "[]" {
 			// Get len of array
 			lname := "l" + strconv.Itoa(f.Order) + "_" + strconv.Itoa(scopeDepth)
-			buf.WriteString("var ")
-			buf.WriteString(lname)
-			buf.WriteString(" int32\n")
-			for i := 0; i < scopeDepth; i++ {
-				buf.WriteString("\t")
-			}
-			buf.WriteString("binary.Read(buffer, binary.LittleEndian, &")
-			buf.WriteString(lname)
-			buf.WriteString(")\n")
+			writeArrayLenRead(lname, scopeDepth, buf)
 
-			// Create array variable
-			for i := 0; i < scopeDepth; i++ {
-				buf.WriteString("\t")
-			}
+			// 	// Create array variable
 			if scopeDepth == 1 {
 				buf.WriteString("m.")
 			}
@@ -302,7 +365,7 @@ func WriteGoDeserial(f MessageField, scopeDepth int, buf *bytes.Buffer, messages
 			buf.WriteString(", ")
 			buf.WriteString(lname)
 			buf.WriteString(")\n")
-
+			//
 			// Read each var into the array in loop
 			for i := 0; i < scopeDepth; i++ {
 				buf.WriteString("\t")
@@ -321,7 +384,7 @@ func WriteGoDeserial(f MessageField, scopeDepth int, buf *bytes.Buffer, messages
 			}
 			buf.WriteString("}\n")
 		} else {
-			// Custom message deserial here.
+			// 	// Custom message deserial here.
 			if scopeDepth == 1 {
 				buf.WriteString("m.")
 			}
@@ -337,7 +400,13 @@ func WriteGoDeserial(f MessageField, scopeDepth int, buf *bytes.Buffer, messages
 				buf.WriteString("m.")
 			}
 			buf.WriteString(f.Name)
-			buf.WriteString(".Deserialize(buffer)\n")
+			buf.WriteString(".Deserialize(buffer[idx:])\n")
+			buf.WriteString("idx+=")
+			if scopeDepth == 1 {
+				buf.WriteString("m.")
+			}
+			buf.WriteString(f.Name)
+			buf.WriteString(".Len()\n")
 		}
 	}
 

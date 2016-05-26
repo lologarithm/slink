@@ -72,7 +72,7 @@ func BenchmarkChannelPipe(b *testing.B) {
 		total += len(msg)
 	}
 	b.StopTimer()
-	fmt.Printf("Rate: %.0f bytes/sec\n", float64(total)/time.Now().Sub(t).Seconds())
+	fmt.Printf("Channel Rate: %.0f bytes/sec\n", float64(total)/time.Now().Sub(t).Seconds())
 }
 
 func BenchmarkBytePipe(b *testing.B) {
@@ -95,5 +95,5 @@ func BenchmarkBytePipe(b *testing.B) {
 		total += pipe.Read(buf)
 	}
 	b.StopTimer()
-	fmt.Printf("Rate: %.0f bytes/sec\n", float64(total)/time.Now().Sub(t).Seconds())
+	fmt.Printf("\nBytePipe Rate: %.0f bytes/sec\n", float64(total)/time.Now().Sub(t).Seconds())
 }

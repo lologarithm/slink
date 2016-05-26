@@ -45,7 +45,7 @@ func main() {
 					field.Size = 2
 				case "uint32", "int32":
 					field.Size = 4
-				case "uint64", "int64":
+				case "uint64", "int64", "float64":
 					field.Size = 8
 				case "string":
 					field.Size = 4

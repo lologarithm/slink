@@ -1,7 +1,6 @@
 package messages
 
 import (
-	"bytes"
 	"encoding/binary"
 	"fmt"
 )
@@ -25,13 +24,12 @@ type Packet struct {
 
 // Pack serializes the content into RawBytes.
 func (m *Packet) Pack() []byte {
-	buf := new(bytes.Buffer)
-	buf.Grow(m.Len())
-	binary.Write(buf, binary.LittleEndian, m.Frame.MsgType)
-	binary.Write(buf, binary.LittleEndian, m.Frame.Seq)
-	binary.Write(buf, binary.LittleEndian, m.Frame.ContentLength)
-	m.NetMsg.Serialize(buf)
-	return buf.Bytes()
+	buf := make([]byte, m.Len())
+	binary.LittleEndian.PutUint16(buf, uint16(m.Frame.MsgType))
+	binary.LittleEndian.PutUint16(buf[2:], m.Frame.Seq)
+	binary.LittleEndian.PutUint16(buf[4:], m.Frame.ContentLength)
+	m.NetMsg.Serialize(buf[6:])
+	return buf
 }
 
 // Len returns the total length of the message including the frame

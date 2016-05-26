@@ -95,3 +95,12 @@ class Vect2 {
  X int32
  Y int32
 }
+
+class A {
+ Name string
+ BirthDay int64
+ Phone string
+ Siblings int32
+ Spouse byte
+ Money float64
+}

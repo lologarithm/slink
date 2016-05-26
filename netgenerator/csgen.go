@@ -91,6 +91,8 @@ func goTypeToCS(tn string) string {
 			tn = "int"
 		case "int64":
 			tn = "long"
+		case "float64", "float32":
+			tn = "double"
 		}
 		tn += prefix
 	}
@@ -105,7 +107,7 @@ func WriteCSSerialize(f MessageField, scopeDepth int, buf *bytes.Buffer, message
 	}
 	switch f.Type {
 	// TODO: special case for []byte
-	case "byte", "int16", "int32", "int64", "uint16", "uint32", "uint64":
+	case "byte", "int16", "int32", "int64", "uint16", "uint32", "uint64", "float64":
 		buf.WriteString("buffer.Write(")
 		if scopeDepth == 1 {
 			buf.WriteString("this.")
@@ -186,7 +188,7 @@ func WriteCSDeserial(f MessageField, scopeDepth int, buf *bytes.Buffer, messages
 		}
 		buf.WriteString(f.Name)
 		buf.WriteString(" = buffer.ReadByte();\n")
-	case "int16", "int32", "int64", "uint16", "uint32", "uint64":
+	case "int16", "int32", "int64", "uint16", "uint32", "uint64", "float64":
 		if scopeDepth == 1 {
 			buf.WriteString("this.")
 		}
@@ -195,6 +197,8 @@ func WriteCSDeserial(f MessageField, scopeDepth int, buf *bytes.Buffer, messages
 		funcName := "Read"
 		if f.Type[0] == 'u' {
 			funcName += strings.ToUpper(f.Type[0:2]) + f.Type[2:]
+		} else if f.Type[0] == 'f' {
+			funcName += "Double"
 		} else {
 			funcName += strings.ToUpper(f.Type[0:1]) + f.Type[1:]
 		}
