@@ -61,7 +61,8 @@ func (g *GameSession) replayHistory(ticks uint32) {
 			g.World.RealTickID = g.World.CurrentTickID
 		}
 		for _, col := range collisions {
-			if col.Entity.EType == ETypeFood {
+			switch col.Entity.EType {
+			case ETypeFood:
 				delete(g.World.Entities, col.Entity.ID)
 				found := g.World.Tree.Remove(col.Entity)
 				if !found {
@@ -89,6 +90,21 @@ func (g *GameSession) replayHistory(ticks uint32) {
 				}
 				fmt.Printf("Snake %d ate a food, size is now: %d", col.Snake.ID, col.Snake.Size)
 				g.sendEat(col.Snake, col.Entity)
+			case ETypeSegment:
+				// Snake ded
+				g.sendDied(col.Snake.ID)
+				g.removeSnake(col.Snake)
+				spawns := make([]*messages.UpdateEntity, len(col.Snake.Segments))
+				// 2. convert body to food.
+				for i, seg := range col.Snake.Segments {
+					g.World.MaxID++
+					g.addEntity(g.World.MaxID, ETypeFood, seg.Position, (seg.Size / 3))
+					entMsg := g.World.Entities[g.World.MaxID].toMsg()
+					spawns[i] = &messages.UpdateEntity{Ent: entMsg}
+				}
+				g.sendSpawns(spawns)
+			case ETypeHead:
+				// TODO: Bigger snake wins!
 			}
 		}
 
@@ -267,7 +283,6 @@ func (g *GameSession) Run() {
 			// fmt.Printf("   Running Tick: %d", g.World.CurrentTickID)
 			// Advance 'real' state if the current state has caught up.
 			if g.World.CurrentTickID == g.World.RealTickID {
-
 				if g.World.RealTickID%50 == 0 {
 					numspawn := 100
 					spawns := make([]*messages.UpdateEntity, numspawn)
@@ -317,8 +332,8 @@ func (g *GameSession) Run() {
 }
 
 func (g *GameSession) removeSnake(snake *Snake) {
+	log.Printf("Removing snake id: %d", snake.ID)
 	if g.World.Entities[snake.ID] == nil {
-		log.Printf("Removing snake id: %d", snake.ID)
 		log.Printf("Snake isn't in world entities.")
 	}
 	// Remove snake from entities and tree
@@ -422,7 +437,22 @@ func (g *GameSession) sendToAll(msg OutgoingMessage) {
 		g.ToNetwork <- msg
 	}
 }
-
+func (g *GameSession) sendDied(snakeID uint32) {
+	removeSnake := &messages.SnakeDied{
+		ID: snakeID,
+	}
+	frame := messages.Frame{
+		MsgType:       messages.SnakeDiedMsgType,
+		Seq:           1,
+		ContentLength: uint16(removeSnake.Len()),
+	}
+	g.sendToAll(OutgoingMessage{
+		msg: messages.Packet{
+			Frame:  frame,
+			NetMsg: removeSnake,
+		},
+	})
+}
 func (g *GameSession) sendEat(snake *Snake, food *Entity) {
 	removeFood := &messages.RemoveEntity{
 		Ent: food.toMsg(),

@@ -6,6 +6,7 @@ import (
 	"log"
 	"math/rand"
 	"net"
+	"os"
 	"time"
 
 	"github.com/lologarithm/slink/slinkserv/messages"
@@ -131,6 +132,11 @@ func ProcessMessage(mu *MockUser, msg messages.Packet) {
 		mu.snakeID = gcmsg.SnakeID
 		mu.startTick = gcmsg.TickID
 		mu.startTime = time.Now()
+	case messages.SnakeDiedMsgType:
+		sdmsg := msg.NetMsg.(*messages.SnakeDied)
+		if sdmsg.ID == mu.snakeID {
+			os.Exit(0)
+		}
 	case messages.MultipartMsgType:
 		handleMultipart(mu, msg)
 	}

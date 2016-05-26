@@ -87,6 +87,10 @@ class UpdateEntity {
  Ent *Entity
 }
 
+class SnakeDied {
+ ID uint32
+}
+
 class Vect2 {
  X int32
  Y int32

@@ -235,8 +235,7 @@ public class ClientState : MonoBehaviour
                 break;
             case MsgType.RemoveEntity:
                 Entity re = ((RemoveEntity)parsedMsg).Ent;
-                                Debug.Log("Removing entity: " + re.ID);
-
+                Debug.Log("Removing entity: " + re.ID);
                 // TODO: removal of snakes here?
                 if (this.foods.ContainsKey(re.ID)) {
                     Debug.Log("Removing food renderer:", this.foods[re.ID]);                    
@@ -244,6 +243,25 @@ public class ClientState : MonoBehaviour
                     this.foods.Remove(re.ID);
                 }
                 this.game.entities.Remove(re.ID);
+                break;
+            case MsgType.SnakeDied:
+                uint id = ((SnakeDied)parsedMsg).ID;
+                if (this.game.players.ContainsKey(id)) {
+                     // TODO: Add fancy effects for when snake dies
+                    foreach (Entity segent in this.game.players[id].segments) {
+                        this.game.entities.Remove(segent.ID);
+                        if (this.segments.ContainsKey(segent.ID))
+                        {
+                            Destroy(this.segments[segent.ID]);
+                            this.segments.Remove(segent.ID);
+                        }
+                    }
+                    this.game.players.Remove(id);
+                }
+                if (this.mySnake == id) {
+                    //TODO: go back to login screen
+                    Application.Quit();
+                }
                 break;
             case MsgType.GameConnected:
                 GameConnected gc = ((GameConnected)parsedMsg);

@@ -33,6 +33,7 @@ const (
 	TurnSnakeMsgType
 	RemoveEntityMsgType
 	UpdateEntityMsgType
+	SnakeDiedMsgType
 	Vect2MsgType
 )
 
@@ -72,6 +73,8 @@ func ParseNetMessage(packet Packet, content []byte) Net {
 		msg = &RemoveEntity{}
 	case UpdateEntityMsgType:
 		msg = &UpdateEntity{}
+	case SnakeDiedMsgType:
+		msg = &SnakeDied{}
 	case Vect2MsgType:
 		msg = &Vect2{}
 	default:
@@ -576,6 +579,24 @@ func (m *UpdateEntity) Deserialize(buffer *bytes.Buffer) {
 func (m *UpdateEntity) Len() int {
 	mylen := 0
 	mylen += m.Ent.Len()
+	return mylen
+}
+
+type SnakeDied struct {
+	ID uint32
+}
+
+func (m *SnakeDied) Serialize(buffer *bytes.Buffer) {
+	binary.Write(buffer, binary.LittleEndian, m.ID)
+}
+
+func (m *SnakeDied) Deserialize(buffer *bytes.Buffer) {
+	binary.Read(buffer, binary.LittleEndian, &m.ID)
+}
+
+func (m *SnakeDied) Len() int {
+	mylen := 0
+	mylen += 4
 	return mylen
 }
 
