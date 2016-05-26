@@ -70,7 +70,11 @@ var maxPacketSize int = 512
 
 func (s *Server) sendMessages() {
 	for {
-		msg := <-s.outToNetwork
+		msg, ok := <-s.outToNetwork
+		if !ok {
+			fmt.Printf("Server Sender closed.\n")
+			return
+		}
 		msgcontent := msg.data
 		if len(msgcontent) == 0 {
 			msg.msg.Frame.Seq = msg.dest.Seq
@@ -158,6 +162,7 @@ func RunServer(s Server, exit chan int, complete chan int) {
 		case <-exit:
 			fmt.Println("Killing Socket Server")
 			s.conn.Close()
+			close(s.outToNetwork)
 			run = false
 		case client := <-s.disconnectPlayer:
 			s.DisconnectConn(client.address.String())

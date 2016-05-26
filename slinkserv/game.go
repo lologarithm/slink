@@ -268,7 +268,7 @@ func (g *GameSession) Run() {
 					g.commandHistory = append(g.commandHistory, removecmd)
 				}
 			case <-g.Exit:
-				fmt.Print("EXITING: Run in Game.go\n")
+				fmt.Printf("EXITING: Game %d.\n", g.ID)
 				return
 			default:
 				time.Sleep(time.Microsecond)

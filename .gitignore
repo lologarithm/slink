@@ -1,6 +1,12 @@
 slink
 slink.exe
+
 slinkserv/automation/load/load
+slinkserv/automation/functional/functional
+
+slinkserv/automation/load/load.exe
+slinkserv/automation/functional/functional.exe
+
 load.exe
 netgenerator/netgenerator
 slinkclient/Temp

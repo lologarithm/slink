@@ -1,6 +1,7 @@
 package slinkserv
 
 import (
+	"fmt"
 	"log"
 	"math"
 
@@ -59,9 +60,11 @@ func (gm *GameManager) Run() {
 		case gMsg := <-gm.FromGames:
 			gm.ProcessGameMsg(gMsg)
 		case <-gm.Exit:
+			fmt.Printf("Manager got exit signal, shutting down all games.\n")
 			for _, game := range gm.Games {
 				game.Exit <- 1
 			}
+			fmt.Printf("  Shutdown sent to all games, manager closing now.\n")
 			return
 		}
 	}
