@@ -88,7 +88,7 @@ func (g *GameSession) replayHistory(ticks uint32) {
 				for _, seg := range col.Snake.Segments {
 					seg.Size = col.Snake.Size
 				}
-				fmt.Printf("Snake %d ate a food, size is now: %d", col.Snake.ID, col.Snake.Size)
+				fmt.Printf("Snake %d ate a food, size is now: %d\n", col.Snake.ID, col.Snake.Size)
 				g.sendEat(col.Snake, col.Entity)
 			case ETypeSegment:
 				// Snake ded
