@@ -32,7 +32,7 @@ public class ClientState : MonoBehaviour
 	// Unity objects state
 	private Dictionary<uint, GameObject> segments = new Dictionary<uint, GameObject> ();
     private Dictionary<uint, GameObject> foods = new Dictionary<uint, GameObject> ();
-    
+
 	private Text latencyText;
 
     // Unity lifecycle methods
@@ -59,7 +59,7 @@ public class ClientState : MonoBehaviour
         }
         this.CreateAccount(name, name);
 	}
-        
+
 	// Update is called once per frame?
 	void Update()
 	{
@@ -67,14 +67,18 @@ public class ClientState : MonoBehaviour
 		for (int i = 0; i < loops; i++)
 		{
 			NetPacket msg = this.message_queue.Dequeue();
-			this.ParseAndProcess(msg);
+            if (msg == null) {
+                Debug.Log("Dequeuing a null message!?");
+            } else {
+			    this.ParseAndProcess(msg);
+            }
 		}
 		// If game is null, we have nothing to do but process network.
-		if (this.game == null) 
+		if (this.game == null)
 		{
 			return;
 		}
-        
+
         this.game.UpdateTick();
 
         if (this.game.LastTickUpdated >= this.game.Tick) {
@@ -94,12 +98,12 @@ public class ClientState : MonoBehaviour
         {
             newTurn++;
         }
-        
+
         if (currentTurn != newTurn) {
             this.game.players[this.mySnake].turnDirection = newTurn;
             this.SetDirection(newTurn);
         }
-        
+
         this.updateGame();
 	}
 
@@ -150,6 +154,9 @@ public class ClientState : MonoBehaviour
     // Message processing
 	private void ParseAndProcess(NetPacket np)
 	{
+        if (np == null) {
+            Debug.Log("p&p called on null packet!?");
+        }
 		INet parsedMsg = Messages.Parse(np.message_type, np.Content());
 
 		// Read from message queue and process!
@@ -192,9 +199,7 @@ public class ClientState : MonoBehaviour
 					{
 						Debug.LogError("Multipart message content parsing failed... we done goofed");
 					}
-                    Debug.Log("Multipart len:" + content.Length);
-                    Debug.Log("newpacket CL: " + newpacket.content_length);
-					this.ParseAndProcess(newpacket);
+ 					this.ParseAndProcess(newpacket);
 				}
 				// 5. clean up!
 				break;
@@ -219,26 +224,24 @@ public class ClientState : MonoBehaviour
             case MsgType.TurnSnake:
                 TurnSnake sd = ((TurnSnake)parsedMsg);
                 if (this.game.players.ContainsKey(sd.ID) ) {
-                    this.game.players[sd.ID].turnDirection = sd.Direction;    
+                    this.game.players[sd.ID].turnDirection = sd.Direction;
                 }
                 break;
             case MsgType.UpdateEntity:
                 Entity e = ((UpdateEntity)parsedMsg).Ent;
-                this.game.entities[e.ID] = e;
                 if (this.game.players.ContainsKey(e.ID)) {
-                    Debug.Log("Updating player snake: " + e.ID);
                     this.game.players[e.ID].size = e.Size;
                     foreach (Entity seg in this.game.players[e.ID].segments) {
                         seg.Size = e.Size;
                     }
+                } else {
+                    this.game.entities[e.ID] = e;
                 }
                 break;
             case MsgType.RemoveEntity:
                 Entity re = ((RemoveEntity)parsedMsg).Ent;
-                Debug.Log("Removing entity: " + re.ID);
                 // TODO: removal of snakes here?
                 if (this.foods.ContainsKey(re.ID)) {
-                    Debug.Log("Removing food renderer:", this.foods[re.ID]);                    
                     Destroy(this.foods[re.ID]);
                     this.foods.Remove(re.ID);
                 }
@@ -283,7 +286,7 @@ public class ClientState : MonoBehaviour
                 this.loadEntities(gmf.Entities, gmf.Snakes);
                 this.game.MasterTick = gmf.Tick;
                 int nticks = (int)(this.game.Tick - this.game.MasterTick);
-				
+
                 if (nticks <= 0)
                 {
                     this.game.Tick = this.game.MasterTick;
@@ -323,7 +326,7 @@ public class ClientState : MonoBehaviour
         }
     }
 
-    private bool updateGame() {        
+    private bool updateGame() {
         foreach (KeyValuePair<uint, Entity> entry in this.game.entities) {
             var e = entry.Value;
             if (e.EType == 3) // food
@@ -383,7 +386,7 @@ public class ClientState : MonoBehaviour
                     {
                         GameObject newseg = (GameObject)Instantiate(this.segmentPrefab, new Vector3(e.X, e.Y, 0), Quaternion.identity);
                         newseg.name = "segment" + e.ID.ToString();
-                        this.segments[e.ID] = newseg; 
+                        this.segments[e.ID] = newseg;
                     }
                 }
                 this.updateEntityPos(e);
@@ -408,9 +411,10 @@ public class ClientState : MonoBehaviour
         segObj.transform.rotation = Quaternion.AngleAxis(angle, new Vector3(0,0,1));
     }
 
-    private void updateCamera() 
+    private void updateCamera()
     {
         if (!this.game.entities.ContainsKey(this.mySnake)) {
+            Debug.Log("Unable to find my snake in entity list!?!");
             return;
         }
         Entity mysnake = this.game.entities[this.mySnake];
@@ -425,7 +429,7 @@ public class GameInstance
 	public string Name;
     public Dictionary<uint, Entity> entities = new Dictionary<uint, Entity>();
     public Dictionary<uint, PlayerSnake> players = new Dictionary<uint, PlayerSnake>(); // List of players
-        
+
 	public uint LastTickUpdated;
 	public uint Tick;
 
@@ -458,7 +462,7 @@ public class PlayerSnake
             this.segments[0].Facing = VectorUtils.GameToNetworkVect2(newface);
             // Debug.Log("Tick: " + (currentTick-1) + " Facing: " + newface.ToString());
         }
-        
+
         int snakeDist = this.size / 3;
         double spPerTick = (((float)this.speed) / tickPerSecond) / 100.0;
         double dist = spPerTick * nticks;

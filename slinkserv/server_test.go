@@ -86,6 +86,7 @@ func BenchmarkServerParsing(b *testing.B) {
 		t += len(msgBytes)
 	}
 	b.StopTimer()
+	fakeClient.FromNetwork.Close()
 	fmt.Printf("bytes/s processed: %.0f\n", float64(t)/time.Now().Sub(st).Seconds())
 }
 

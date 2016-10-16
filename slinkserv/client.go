@@ -58,13 +58,23 @@ func (client *Client) ProcessBytes(disconClient chan Client) {
 	partialMessages := map[uint32][]*messages.Multipart{}
 
 	go func() {
-		go func() {
-			for {
-				time.Sleep(time.Second * 2)
-				if !client.Alive {
-					log.Printf("Client %d: no longer alive.", client.ID)
+		timer := time.After(time.Second * 2)
+		for client.Alive {
+			select {
+			case msg, ok := <-client.FromGameManager:
+				if !ok {
 					return
 				}
+				switch tmsg := msg.(type) {
+				case ConnectedGame:
+					activeGame := &clientGame{
+						toGame: tmsg.ToGame,
+						id:     tmsg.ID,
+					}
+					atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&client.activeGame)), unsafe.Pointer(activeGame))
+					log.Printf("Client %d connected to game: %d", client.ID, tmsg.ID)
+				}
+			case <-timer:
 				client.ToNetwork <- NewOutgoingMsg(client, messages.HeartbeatMsgType, &messages.Heartbeat{
 					Time:    time.Now().UTC().UnixNano(),
 					Latency: atomic.LoadInt64(&client.latency),
@@ -77,23 +87,9 @@ func (client *Client) ProcessBytes(disconClient chan Client) {
 					log.Printf("Client %d: no message in past %.1f seconds. Closing down.", client.ID, time.Now().UTC().Sub(lastMsg).Seconds())
 					return
 				}
+				timer = time.After(time.Second * 2)
 			}
-		}()
 
-		for client.Alive {
-			msg, ok := <-client.FromGameManager
-			if !ok {
-				return
-			}
-			switch tmsg := msg.(type) {
-			case ConnectedGame:
-				activeGame := &clientGame{
-					toGame: tmsg.ToGame,
-					id:     tmsg.ID,
-				}
-				atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&client.activeGame)), unsafe.Pointer(activeGame))
-				log.Printf("Client %d connected to game: %d", client.ID, tmsg.ID)
-			}
 		}
 	}()
 
@@ -136,7 +132,7 @@ func (client *Client) ProcessBytes(disconClient chan Client) {
 			// This means we need more data still.
 			n := client.FromNetwork.Read(client.buffer[client.wIdx:])
 			if n == 0 {
-				log.Printf("Client %d network buffer closed, shutting down client.", client.ID)
+				// log.Printf("Client %d network buffer closed, shutting down client.", client.ID)
 				client.Alive = false
 				break // Break out of alive!
 			}
@@ -166,7 +162,7 @@ func (client *Client) ProcessBytes(disconClient chan Client) {
 					}
 					avgPings /= int64(numpings)
 				} else {
-					copy(client.pings[:4], client.pings) // Copy back all the pings so we only have 4.
+					copy(client.pings[1:], client.pings[:4]) // Copy back all the pings so we only have 4.
 					client.pings[0] = ping
 					for i := 0; i < 5; i++ {
 						avgPings += client.pings[i]

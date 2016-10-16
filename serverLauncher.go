@@ -2,8 +2,12 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"os/signal"
+	"runtime/pprof"
+	"strconv"
+	"time"
 
 	"github.com/lologarithm/slink/slinkserv"
 )
@@ -16,19 +20,22 @@ func main() {
 	s := slinkserv.NewServer(exit)
 	go slinkserv.RunServer(s, exit, complete)
 
-	// f, err := os.Create(strconv.FormatInt(time.Now().Unix(), 10) + "_servercpu.prof")
-	// if err != nil {
-	// 	log.Fatalf("Could not create profile results file: \n%v", err)
-	// } else {
-	// 	pprof.StartCPUProfile(f)
-	// }
+	go func() {
+		for {
+			id := time.Now().Unix()
+			f, err := os.Create(strconv.FormatInt(id, 10) + "_servercpu.prof")
+			if err != nil {
+				log.Fatalf("Could not create profile results file: \n%v", err)
+			} else {
+				pprof.StartCPUProfile(f)
+			}
+			time.Sleep(60 * time.Second)
+			pprof.StopCPUProfile()
+			fmt.Printf("CPU profile %d completed.\n", id)
+		}
+	}()
 
 	fmt.Println("Server started. Press a ctrl+c to exit.")
-
-	// time.Sleep(60 * time.Second)
-	// pprof.StopCPUProfile()
-	// fmt.Println("CPU profile completed.")
-
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
 	<-c

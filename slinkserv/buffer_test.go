@@ -58,7 +58,7 @@ func BenchmarkChannelPipe(b *testing.B) {
 	t := time.Now()
 	total := 0
 	n := (totalBytes * 128) / 1024
-
+	fmt.Println("")
 	b.ResetTimer()
 	go func() {
 		inbuf := make([]byte, 128)
@@ -82,7 +82,7 @@ func BenchmarkBytePipe(b *testing.B) {
 	total := 0
 	buf := make([]byte, 1024)
 	n := (totalBytes * 128) / 1024
-
+	fmt.Println("")
 	b.ResetTimer()
 	go func() {
 		inbuf := make([]byte, 128)
@@ -95,5 +95,5 @@ func BenchmarkBytePipe(b *testing.B) {
 		total += pipe.Read(buf)
 	}
 	b.StopTimer()
-	fmt.Printf("\nBytePipe Rate: %.0f bytes/sec\n", float64(total)/time.Now().Sub(t).Seconds())
+	fmt.Printf("BytePipe Rate: %.0f bytes/sec\n", float64(total)/time.Now().Sub(t).Seconds())
 }

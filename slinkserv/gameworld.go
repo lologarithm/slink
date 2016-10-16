@@ -53,17 +53,10 @@ func (gw *GameWorld) Clone() *GameWorld {
 	nw.CurrentTickID = gw.CurrentTickID
 	nw.RealTickID = gw.RealTickID // When we rewind old states should have the 'current' state.
 	nw.MaxID = gw.MaxID
-	nw.Tree = *gw.Tree.Clone()
+	newtree, children := gw.Tree.Clone()
+	nw.Tree = *newtree
 	nw.Entities = make(map[uint32]*Entity, len(gw.Entities))
 	nw.Snakes = make(map[uint32]*Snake, len(gw.Snakes))
-
-	max := int32(MapSize + 1)
-	children := nw.Tree.Query(quadtree.BoundingBox{
-		MinX: -max,
-		MaxX: max,
-		MinY: -max,
-		MaxY: max,
-	})
 
 	// TODO: Remove this one day, this is just validation code to ensure we clone correctly.
 	if len(children) != len(gw.Entities) {

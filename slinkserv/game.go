@@ -454,35 +454,14 @@ func (g *GameSession) sendDied(snakeID uint32) {
 	})
 }
 func (g *GameSession) sendEat(snake *Snake, food *Entity) {
-	removeFood := &messages.RemoveEntity{
+	msg := NewOutgoingMsg(nil, messages.RemoveEntityMsgType, &messages.RemoveEntity{
 		Ent: food.toMsg(),
-	}
-	frame := messages.Frame{
-		MsgType:       messages.RemoveEntityMsgType,
-		Seq:           1,
-		ContentLength: uint16(removeFood.Len()),
-	}
-	g.sendToAll(OutgoingMessage{
-		msg: messages.Packet{
-			Frame:  frame,
-			NetMsg: removeFood,
-		},
 	})
-
-	upSnake := &messages.UpdateEntity{
+	g.sendToAll(msg)
+	msg = NewOutgoingMsg(nil, messages.UpdateEntityMsgType, &messages.UpdateEntity{
 		Ent: snake.Entity.toMsg(),
-	}
-	frame = messages.Frame{
-		MsgType:       messages.UpdateEntityMsgType,
-		Seq:           1,
-		ContentLength: uint16(upSnake.Len()),
-	}
-	g.sendToAll(OutgoingMessage{
-		msg: messages.Packet{
-			Frame:  frame,
-			NetMsg: upSnake,
-		},
 	})
+	g.sendToAll(msg)
 
 }
 

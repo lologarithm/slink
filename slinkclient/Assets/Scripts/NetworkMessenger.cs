@@ -136,6 +136,9 @@ internal class NetworkMessenger
 			if (nMsg.full_content != null)
 			{
 				this.numStored -= nMsg.full_content.Length;
+				if (nMsg==null) {
+					Debug.Log("Enqueing a null message!?");
+				} 
 				this.message_queue.Enqueue(nMsg);
 				// If we have enough bytes to start a new message we call ProcessBytes again.
 				if (input_bytes.Length - nMsg.full_content.Length > NetPacket.DEFAULT_FRAME_LEN)
